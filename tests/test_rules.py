@@ -136,10 +136,30 @@ def test_min_quantity_libera_no_limite():
 
 def test_scale_with_quantity_multiplica():
     engine, game, _ = _montar(
-        {"gifts": [{"gift": "Rose", "action": "xp", "xp": 5, "scale_with_quantity": True}]}
+        {"gifts": [{"gift": "Rose", "action": "xp", "xp": 5,
+                    "scale_with_quantity": True, "max_multiplier": 10}]}
     )
     engine.process(LiveEvent(type=EventType.GIFT, username="j", gift_name="Rose", quantity=4))
     assert game.state.xp == 20
+
+
+def test_scale_with_quantity_respeita_o_teto():
+    engine, game, _ = _montar(
+        {"gifts": [{"gift": "Rose", "action": "xp", "xp": 5,
+                    "scale_with_quantity": True, "max_multiplier": 3}]}
+    )
+    engine.process(LiveEvent(type=EventType.GIFT, username="j", gift_name="Rose", quantity=100))
+    assert game.state.xp == 15
+
+
+def test_scale_with_quantity_sem_teto_nao_escala():
+    # A config.json exige o teto; isto e a rede de seguranca para uma regra
+    # que chegue por outro caminho.
+    engine, game, _ = _montar(
+        {"gifts": [{"gift": "Rose", "action": "xp", "xp": 5, "scale_with_quantity": True}]}
+    )
+    engine.process(LiveEvent(type=EventType.GIFT, username="j", gift_name="Rose", quantity=100))
+    assert game.state.xp == 5
 
 
 def test_sem_scale_quantity_o_valor_e_unico():
@@ -246,3 +266,21 @@ def test_erro_em_uma_regra_nao_derruba_o_processamento():
     engine.process(LiveEvent(type=EventType.COMMENT, username="m", text="x"))
     # Nao levantou; o loop do jogo continua.
     assert game.state.level == 1
+
+
+def test_likes_sao_contados_uma_vez_por_evento():
+    # Uma rajada que cruza tres marcos chamava apply_action tres vezes e o
+    # HUD mostrava 900 likes para um evento de 300.
+    engine, game, _ = _montar({"likes": [{"every": 100, "action": "xp", "xp": 20}]})
+    engine.process(
+        LiveEvent(type=EventType.LIKE, username="m", like_total=300, like_delta=300)
+    )
+    assert game.state.total_likes == 300
+    assert game.state.xp == 60  # tres marcos, 20 XP cada
+
+
+def test_likes_mostram_o_total_da_live_e_nao_encolhem():
+    engine, game, _ = _montar({"likes": [{"every": 100, "action": "xp", "xp": 20}]})
+    for total in (100, 200, 300, 250):
+        engine.process(LiveEvent(type=EventType.LIKE, username="m", like_total=total))
+    assert game.state.total_likes == 300

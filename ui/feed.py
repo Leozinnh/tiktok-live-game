@@ -2,7 +2,7 @@
 
 from game.effects import Announcement
 from game.state import GameState
-from ui.theme import Theme
+from ui.theme import Theme, altura_do_texto
 from ui.widgets import Draw
 
 ICONES = {
@@ -58,9 +58,25 @@ def formatar_anuncio(ann: Announcement, largura_max: int = 46) -> tuple[str, str
 class Feed:
     """Rodape: os eventos mais recentes da LIVE."""
 
+    # Distancia do topo da faixa ate a primeira linha de evento.
+    TOPO_DAS_LINHAS = 74
+    # Espaco entre o fim de uma linha e o comeco da seguinte.
+    VAO_ENTRE_LINHAS = 8
+
     def __init__(self, theme: Theme, fontes: dict):
         self.theme = theme
         self.fontes = fontes
+
+    def linhas_visiveis(self, r) -> int:
+        """Quantas linhas de evento cabem na faixa, no maximo `feed_size`.
+
+        O texto nao encolhe com o config, entao um `feed_size` grande demais
+        mostra menos linhas — nunca linhas fora da faixa.
+        """
+        passo = altura_do_texto(self.fontes, "pequena", self.theme.scale)
+        passo += self.VAO_ENTRE_LINHAS
+        cabem = int((r.h - self.TOPO_DAS_LINHAS) // passo)
+        return max(1, min(self.theme.feed_size, cabem))
 
     def draw(self, d: Draw, state: GameState) -> None:
         r = self.theme.rects["feed"]
@@ -80,9 +96,10 @@ class Feed:
             )
             return
 
-        y = r.y + 74
-        altura_linha = 48
-        for ann in anuncios[-self.theme.feed_size :]:
+        y = r.y + self.TOPO_DAS_LINHAS
+        altura_linha = altura_do_texto(self.fontes, "pequena", self.theme.scale)
+        altura_linha += self.VAO_ENTRE_LINHAS
+        for ann in anuncios[-self.linhas_visiveis(r) :]:
             icone, linha = formatar_anuncio(ann)
             cor = self._cor(ann, c)
             d.texto_em(icone, r.x + 24, y, self.fontes["pequena"], cor)

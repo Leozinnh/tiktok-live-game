@@ -99,3 +99,49 @@ def test_json_invalido_levanta_config_error(tmp_path):
     ruim.write_text("{ isso nao e json }", encoding="utf-8")
     with pytest.raises(ConfigError):
         load_config(ruim)
+
+
+def test_xp_per_level_zero_e_recusado():
+    # Sem esta validacao o `while` de level up nunca termina e a LIVE congela.
+    cfg = _base()
+    cfg["game"]["xp_per_level"] = 0
+    with pytest.raises(ConfigError) as exc:
+        validate_config(cfg)
+    assert "xp_per_level" in str(exc.value)
+
+
+def test_velocidade_inicial_negativa_e_recusada():
+    cfg = _base()
+    cfg["game"]["initial_speed"] = -10
+    with pytest.raises(ConfigError):
+        validate_config(cfg)
+
+
+def test_queue_max_size_zero_e_recusado():
+    # queue.Queue trata maxsize <= 0 como fila infinita: o descarte do
+    # anti-spam sumiria sem aviso.
+    cfg = _base()
+    cfg["app"]["queue_max_size"] = 0
+    with pytest.raises(ConfigError) as exc:
+        validate_config(cfg)
+    assert "queue_max_size" in str(exc.value)
+
+
+def test_scale_with_quantity_exige_max_multiplier():
+    cfg = _base()
+    cfg["rules"]["gifts"] = [
+        {"gift": "Rose", "action": "xp", "xp": 1, "scale_with_quantity": True}
+    ]
+    with pytest.raises(ConfigError) as exc:
+        validate_config(cfg)
+    assert "max_multiplier" in str(exc.value)
+
+
+def test_max_multiplier_zero_e_recusado():
+    cfg = _base()
+    cfg["rules"]["gifts"] = [
+        {"gift": "Rose", "action": "xp", "xp": 1,
+         "scale_with_quantity": True, "max_multiplier": 0}
+    ]
+    with pytest.raises(ConfigError):
+        validate_config(cfg)

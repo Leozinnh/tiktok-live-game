@@ -34,6 +34,10 @@ class GameEngine:
         self.intent_half_life = float(cfg.get("intent_half_life", 1.5))
         self.intent_accel = float(cfg.get("intent_accel", 1800.0))
         self.intent_max_speed = float(cfg.get("intent_max_speed", 420.0))
+        # Velocidade do nivel 1, usada como referencia para transformar o
+        # ganho de velocidade num fator: a escala de `state.speed` nao e a
+        # mesma de `intent_max_speed`, entao ele entra como multiplicador.
+        self._velocidade_inicial = max(1.0, float(cfg.get("initial_speed", 220)))
         self.intent_friction = float(cfg.get("intent_friction", 6.0))
 
         estado = GameState(
@@ -61,6 +65,9 @@ class GameEngine:
         # Limites da arena, em pixels logicos (o renderer so escala depois).
         self.largura = float(config.get("app", {}).get("window_width", 1080))
         self.altura = float(config.get("app", {}).get("window_height", 1920))
+        # O HUD ocupa o topo da tela e e desenhado POR CIMA da arena. Nada
+        # do mundo pode nascer acima daqui, senao o HUD fica coberto.
+        self.topo = float(config.get("app", {}).get("hud_height", 320))
 
         self._jump_duration = 0.8
         # Um respawn limpa inimigos e boss; os laços de simulacao precisam
@@ -147,10 +154,12 @@ class GameEngine:
         espaco = self.max_enemies - len(self.state.enemies)
         criar = max(0, min(count, espaco))
         for _ in range(criar):
+            # Nascem logo abaixo do HUD. O HUD e desenhado por cima da
+            # arena, entao um inimigo acima de `self.topo` fica escondido.
             self.state.enemies.append(
                 Enemy(
                     x=random.uniform(80.0, 1000.0),
-                    y=random.uniform(-120.0, 120.0),
+                    y=self.topo + Enemy.radius + random.uniform(0.0, 140.0),
                 )
             )
         return criar
@@ -159,7 +168,8 @@ class GameEngine:
         if self.state.boss is not None and self.state.boss.is_alive():
             return self.state.boss
         hp = 300 + self.state.level * 50
-        boss = Boss(x=540.0, y=200.0, hp=hp, max_hp=hp)
+        # Abaixo da barra de vida e do rotulo que a arena desenha no topo.
+        boss = Boss(x=540.0, y=self.topo + 150.0, hp=hp, max_hp=hp)
         self.state.boss = boss
         self.state.announcements.push(
             kind="boss",
@@ -217,12 +227,25 @@ class GameEngine:
             if abs(self._intent) < 0.01:
                 self._intent = 0.0
 
+    def _fator_de_velocidade(self) -> float:
+        """Quanto a velocidade atual acelera o personagem, sobre o inicial.
+
+        `state.speed` e escrito pelo presente de velocidade e pelo level up.
+        Sem esta leitura ele era escrito e nunca usado: os dois nao tinham
+        efeito nenhum na tela.
+        """
+        return max(0.0, self.state.speed) / self._velocidade_inicial
+
     def _mover_personagem(self, dt: float) -> None:
         """Acelera na direcao da intencao, em vez de teleportar."""
         personagem = self.state.character
-        alvo = self._intent * self.intent_max_speed
+        fator = self._fator_de_velocidade()
+        alvo = self._intent * self.intent_max_speed * fator
         diferenca = alvo - personagem.vx
-        passo = self.intent_accel * dt
+        # O atrito e proporcional a `vx`, entao a velocidade de regime e
+        # `accel / friction` — e nao o alvo. Escalar so o alvo nao mudaria
+        # nada na tela: a aceleracao tem que escalar junto.
+        passo = self.intent_accel * fator * dt
         personagem.vx += max(-passo, min(passo, diferenca))
         personagem.vx -= personagem.vx * min(1.0, self.intent_friction * dt)
 
@@ -343,4 +366,14 @@ class GameEngine:
         elif event.type == EventType.SHARE:
             self.state.total_shares += 1
         elif event.type == EventType.LIKE:
-            self.state.total_likes += max(1, event.like_delta or 1)
+            # O contador da tela e o total acumulado da LIVE (`like_total`),
+            # nao a soma dos incrementos: uma rajada que cruza varios marcos
+            # chama `apply_action` uma vez por marco e inflava o numero
+            # (300 likes viravam 900). `max` mantem o contador monotonico.
+            # Sem `like_total` (adapter que so informa o incremento), soma o
+            # delta.
+            total = int(event.like_total or 0)
+            if total:
+                self.state.total_likes = max(self.state.total_likes, total)
+            else:
+                self.state.total_likes += max(0, int(event.like_delta or 0))

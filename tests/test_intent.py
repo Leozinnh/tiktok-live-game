@@ -1,3 +1,5 @@
+import pytest
+
 from core.events import EventType, LiveEvent
 from game.engine import GameEngine
 from game.entities import Enemy
@@ -159,3 +161,69 @@ def test_update_com_dt_grande_nao_quebra():
     e.steer(+1)
     e.update(5.0)  # uma pausa longa nao pode explodir a simulacao
     assert 0 <= e.state.character.x <= 1080
+
+
+def _par(velocidade_extra=None, subir_de_nivel=False):
+    """(motor, relogio) com o MESMO relogio nos dois."""
+    relogio = Relogio()
+    e = _engine(relogio)
+    if velocidade_extra is not None:
+        e.grant_speed(velocidade_extra, 30.0)
+    if subir_de_nivel:
+        e.add_xp(e.xp_para_subir(1))
+    return e, relogio
+
+
+def _vx_em_regime(e, relogio, passos=45):
+    """Velocidade do personagem depois de acelerar ate estabilizar.
+
+    Fica dentro do `intent_half_life` (1.5s) e longe da parede: assim a
+    medida isola a velocidade, sem a intencao decair nem o personagem
+    bater na borda e zerar o `vx`.
+    """
+    e.steer(+1)
+    for _ in range(passos):
+        e.update(1 / 60)
+        relogio.avanca(1 / 60)
+    return e.state.character.vx
+
+
+def test_presente_de_velocidade_acelera_o_personagem():
+    # O `speed` era placebo: `state.speed` era escrito e nunca lido, entao
+    # o presente nao mudava nada na tela.
+    e_lento, r1 = _par()
+    base = _vx_em_regime(e_lento, r1)
+
+    e_rapido, r2 = _par(velocidade_extra=150)
+    rapido = _vx_em_regime(e_rapido, r2)
+
+    assert base > 0
+    assert rapido > base * 1.2
+
+
+def test_o_bonus_de_velocidade_nao_deixa_marca():
+    expirado, r1 = _par(velocidade_extra=150)
+    r1.avanca(60.0)  # o efeito expira
+    depois = _vx_em_regime(expirado, r1)
+
+    limpo, r2 = _par()
+    assert depois == pytest.approx(_vx_em_regime(limpo, r2), rel=0.02)
+
+
+def test_subir_de_nivel_deixa_o_personagem_mais_rapido():
+    e, r1 = _par()
+    antes = _vx_em_regime(e, r1)
+
+    subiu, r2 = _par(subir_de_nivel=True)
+    depois = _vx_em_regime(subiu, r2)
+
+    assert subiu.state.level == 2
+    assert depois > antes
+
+
+def test_o_bonus_de_velocidade_expira():
+    e, relogio = _par(velocidade_extra=150)
+    assert e.state.speed > e.state.base_speed
+    relogio.avanca(60.0)
+    e.update(1 / 60)
+    assert e.state.speed == e.state.base_speed

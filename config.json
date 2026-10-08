@@ -3,14 +3,16 @@
     "fps": 60,
     "window_width": 1080,
     "window_height": 1920,
-    "render_scale": 1.0,
+    "render_scale": 0.6,
     "queue_max_size": 5000,
     "events_per_frame": 25,
     "feed_size": 6,
-    "announce_ttl": 4.0
+    "announce_ttl": 4.0,
+    "hud_height": 320,
+    "feed_height": 430
   },
   "tiktok": {
-    "username": "@SEU_USUARIO",
+    "username": "@meninodolancer",
     "reconnect_seconds": 5,
     "reconnect_max_seconds": 60,
     "fetch_gift_info": true

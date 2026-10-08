@@ -19,6 +19,27 @@ JANELA_MINIMA = 240
 # modo teste aceita, porque nao conecta ao TikTok.
 PLACEHOLDER_USERNAME = "@SEU_USUARIO"
 
+# Valores minimos dos campos de `game` e `app`. Sem esta validacao, um zero
+# no config.json trava a LIVE em silencio: `xp_per_level: 0` faz o laco de
+# level up nunca terminar, e `queue_max_size: 0` faz o queue.Queue virar
+# fila infinita e desligar o descarte do anti-spam.
+MINIMOS_DO_JOGO = {
+    "max_hp": 1,
+    "initial_hp": 0,
+    "initial_xp": 0,
+    "initial_level": 1,
+    "initial_speed": 1,
+    "xp_per_level": 1,
+    "xp_level_step": 0,
+    "base_enemy_damage": 0,
+    "intent_half_life": 0.01,
+    "intent_accel": 0,
+    "intent_max_speed": 0,
+    "intent_friction": 0,
+}
+
+MINIMOS_DO_APP = {"queue_max_size": 1, "events_per_frame": 1, "feed_size": 1}
+
 DEFAULTS: dict[str, Any] = {
     "app": {
         "fps": 60,
@@ -73,7 +94,11 @@ def _exigir_numero(valor: Any, onde: str, campo: str, minimo: float = 0.0) -> No
     if not isinstance(valor, (int, float)) or isinstance(valor, bool):
         raise ConfigError(f"{onde}: campo '{campo}' precisa ser numero, veio {valor!r}.")
     if valor < minimo:
-        raise ConfigError(f"{onde}: campo '{campo}' nao pode ser negativo (veio {valor}).")
+        if minimo <= 0:
+            raise ConfigError(f"{onde}: campo '{campo}' nao pode ser negativo (veio {valor}).")
+        raise ConfigError(
+            f"{onde}: campo '{campo}' precisa ser pelo menos {minimo} (veio {valor})."
+        )
 
 
 def _validar_regra(regra: dict, onde: str) -> None:
@@ -94,6 +119,16 @@ def _validar_regra(regra: dict, onde: str) -> None:
     for campo in ("xp", "min_quantity", "max_multiplier"):
         if campo in regra:
             _exigir_numero(regra[campo], onde, campo)
+
+    # O teto e o que impede um presente de 500 unidades valer 500x. Sem ele
+    # a escala fica sem limite, entao a configuracao e recusada na entrada.
+    if regra.get("scale_with_quantity"):
+        teto = regra.get("max_multiplier")
+        if not isinstance(teto, (int, float)) or isinstance(teto, bool) or teto < 1:
+            raise ConfigError(
+                f"{onde}: 'scale_with_quantity' exige 'max_multiplier' >= 1 "
+                f"(veio {teto!r}). Sem teto, um presente de 500 unidades vale 500x."
+            )
 
     # `amount` pode ser negativo: a regra de "esquerda" manda amount -1 e o
     # handler de `steer` usa o sinal como direcao.
@@ -149,6 +184,16 @@ def validate_config(config: dict, exigir_username: bool = True) -> None:
         )
 
     _exigir_numero(app.get("fps"), "app", "fps", minimo=1)
+    for campo, minimo in MINIMOS_DO_APP.items():
+        if campo in app:
+            _exigir_numero(app[campo], "app", campo, minimo=minimo)
+
+    jogo = config["game"]
+    if not isinstance(jogo, dict):
+        raise ConfigError("'game' precisa ser um objeto JSON.")
+    for campo, minimo in MINIMOS_DO_JOGO.items():
+        if campo in jogo:
+            _exigir_numero(jogo[campo], "game", campo, minimo=minimo)
 
     rules = config["rules"]
     if not isinstance(rules, dict):

@@ -14,18 +14,10 @@ from ui.arena import Arena
 from ui.feed import Feed
 from ui.hud import Hud
 from ui.overlay import Overlay
-from ui.theme import Theme
+from ui.theme import TAMANHOS_FONTE, Theme
 from ui.widgets import Draw, TextCache
 
 logger = logging.getLogger(__name__)
-
-TAMANHO_FONTE = {
-    "minima": 20,
-    "pequena": 26,
-    "media": 34,
-    "titulo": 46,
-    "gigante": 92,
-}
 
 
 class PygameUI:
@@ -50,7 +42,7 @@ class PygameUI:
             chave: pygame.font.SysFont(
                 "Segoe UI", max(8, int(tamanho_px * escala_fonte)), bold=chave in {"titulo", "gigante"}
             )
-            for chave, tamanho_px in TAMANHO_FONTE.items()
+            for chave, tamanho_px in TAMANHOS_FONTE.items()
         }
 
         self.draw_ctx = Draw(self.screen, self.theme, self.texto)

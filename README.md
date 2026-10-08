@@ -110,9 +110,11 @@ O que mais importa:
 | Campo | Para que serve |
 |---|---|
 | `app.window_width` / `window_height` | **1080x1920.** Não mude sem mudar o OBS junto |
-| `app.render_scale` | `1.0` = janela cheia; `0.5` = 540x960, para PCs fracos. O OBS captura e escala de volta |
+| `app.render_scale` | Tamanho da janela na sua tela. Vem em **`0.6`** = 648x1152, que cabe num monitor 1080p. `1.0` = 1080x1920 (só em tela 4K); `0.5` = 540x960. **Isto não muda a resolução do jogo** — o OBS captura a janela e escala de volta para 1080x1920 |
 | `app.fps` | 60 por padrão. `30` economiza CPU |
-| `app.feed_size` | Quantas linhas o painel de eventos mostra |
+| `app.feed_size` | Quantas linhas o painel de eventos mostra. Se não couberem todas, o feed mostra as que cabem em vez de vazar da faixa |
+| `app.hud_height` | Altura da faixa do HUD, em pixels lógicos. A arena começa aqui |
+| `app.feed_height` | Altura da faixa do feed, no rodapé |
 | `app.events_per_frame` | Teto de eventos processados por frame. É uma das travas anti-spam |
 | `limits.max_enemies` | Teto de inimigos na tela |
 | `limits.action_budget` | Teto global por segundo, por ação. Ex.: `"spawn_enemy": 4.0` |
@@ -169,8 +171,12 @@ Comandos do REPL:
 | `help` / `quit` | Ajuda / sair |
 
 **`--burst` existe para provar o anti-spam.** Se o jogo travar com 500 eventos, o anti-spam falhou.
-Testado aqui: `--burst 9000` (quase o dobro da fila de 5000) roda e sai com `aceitos=9000 |
+Testado aqui: `--burst 9000` (quase o dobro da fila de 5000) roda e mostra `aceitos=9000 |
 descartados=4000`, sem travar em momento nenhum.
+
+**`--burst` e `--script` não fecham sozinhos:** eles jogam os eventos e deixam a janela aberta
+para você ver o resultado. A contagem final (`aceitos` / `descartados`) aparece no console
+quando você aperta **ESC**.
 
 Atalhos na janela: **F5** comenta, **F6** manda um presente, **F7** rajada. **ESC** fecha.
 
@@ -404,12 +410,12 @@ Verificado nesta máquina, rodando os comandos exatamente como estão escritos a
 
 | Verificação | Resultado |
 |---|---|
-| Suíte de testes (`pytest`) | **186 passaram**, nenhum skip |
+| Suíte de testes (`pytest`) | **220 passaram**, nenhum skip |
 | Instalação limpa (`venv` + `pip install -r requirements.txt`) | OK no Python 3.14.6 |
 | `python main.py` com o placeholder de username | Recusa com mensagem clara, código de saída 2 |
-| `--test --script demo` | 15 eventos, level up, chefe, banners, encerra limpo |
+| `--test --script demo` | 15 eventos, level up, chefe, banners, sai limpo no ESC |
 | A sequência de REPL da seção 4 | `Rose 10` = +50 XP · `like 250` = 2 marcos · `Lion` = banner MEGA · `Galaxy` = chefe |
-| `--burst 2000` e `--burst 9000` | Sem travar. 9000 descarta 4000 e encerra sozinho |
+| `--burst 2000` e `--burst 9000` | Sem travar. Com 9000, a fila enche em 5000 e descarta 4000 |
 
 **Isto não foi verificado, porque precisa de você:**
 

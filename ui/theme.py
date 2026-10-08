@@ -12,9 +12,46 @@ ALTURA_LOGICA = 1920
 
 # Faixas verticais. O TikTok sobrepoe legenda e botoes no topo e na base,
 # por isso o HUD e o feed nao encostam nas bordas.
-ALTURA_HUD = 300
+TOPO_HUD = 40
+# Respiro entre a ultima linha do HUD e a arena, para o rodape nao encostar
+# na linha divisoria.
+RESPIRO_HUD = 16
+ALTURA_HUD = 320
 ALTURA_FEED = 430
 MARGEM = 28
+
+# Tamanho nominal de cada fonte, em unidades logicas. O layout e a criacao
+# das fontes leem daqui: duas tabelas divergindo e como o HUD quebra.
+TAMANHOS_FONTE = {
+    "minima": 20,
+    "pequena": 26,
+    "media": 34,
+    "titulo": 46,
+    "gigante": 92,
+}
+
+# Uma linha ocupa mais que o tamanho nominal da fonte: no Segoe UI a altura
+# real e ~1.35x o nominal. Posicionar as linhas pelo valor nominal fazia o
+# HUD transbordar para dentro da arena.
+ENTRELINHA = 1.35
+
+
+def altura_da_linha(chave: str) -> float:
+    """Altura esperada de uma linha, em unidades logicas."""
+    return TAMANHOS_FONTE[chave] * ENTRELINHA
+
+
+def altura_do_texto(fontes: dict, chave: str, escala: float = 1.0) -> float:
+    """Altura real de uma linha, em unidades logicas.
+
+    A fonte do sistema pode ser mais alta que o tamanho nominal e ela e
+    criada em pixels (ja escalada); quando informa a propria altura, essa
+    medida manda. Sem fonte, cai no valor calculado de `altura_da_linha`.
+    """
+    medir = getattr(fontes.get(chave), "get_height", None)
+    if callable(medir):
+        return float(medir()) / escala
+    return altura_da_linha(chave)
 
 CORES = {
     "fundo": (14, 16, 24),
@@ -76,6 +113,8 @@ class Theme:
     height: int = ALTURA_LOGICA
     scale: float = 1.0
     feed_size: int = 6
+    hud_height: float = ALTURA_HUD
+    feed_height: float = ALTURA_FEED
     cores: dict = field(default_factory=lambda: dict(CORES))
     rects: dict = field(default_factory=dict)
 
@@ -91,19 +130,21 @@ class Theme:
             height=ALTURA_LOGICA,
             scale=escala,
             feed_size=int(app.get("feed_size", 6)),
+            hud_height=float(app.get("hud_height", ALTURA_HUD)),
+            feed_height=float(app.get("feed_height", ALTURA_FEED)),
         )
         tema.rects = tema._montar_layout()
         return tema
 
     def _montar_layout(self) -> dict[str, Rect]:
         largura_util = self.width - MARGEM * 2
-        feed_h = ALTURA_FEED
-        arena_h = self.height - ALTURA_HUD - feed_h
+        topo_arena = self.hud_height
+        base_arena = self.height - self.feed_height
 
         return {
-            "hud": Rect(MARGEM, 40, largura_util, ALTURA_HUD - 40),
-            "arena": Rect(0, ALTURA_HUD, self.width, arena_h),
-            "feed": Rect(MARGEM, self.height - feed_h, largura_util, feed_h - MARGEM),
+            "hud": Rect(MARGEM, TOPO_HUD, largura_util, topo_arena - TOPO_HUD),
+            "arena": Rect(0, topo_arena, self.width, base_arena - topo_arena),
+            "feed": Rect(MARGEM, base_arena, largura_util, self.feed_height - MARGEM),
         }
 
     def window_size(self) -> tuple[int, int]:

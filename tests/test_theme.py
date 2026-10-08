@@ -1,6 +1,6 @@
 import pytest
 
-from ui.theme import Theme
+from ui.theme import ALTURA_HUD, TOPO_HUD, Theme, altura_da_linha
 
 
 def _cfg(escala=1.0, w=1080, h=1920):
@@ -55,3 +55,23 @@ def test_o_hud_deixa_espaco_para_a_interface_do_tiktok():
 
 def test_feed_size_vem_do_config():
     assert Theme.from_config(_cfg()).feed_size == 6
+
+
+def test_a_faixa_do_hud_vem_do_config():
+    cfg = _cfg()
+    cfg["app"]["hud_height"] = 400
+    t = Theme.from_config(cfg)
+    assert t.rects["hud"].bottom == 400
+    assert t.rects["arena"].top == 400
+
+
+def test_a_faixa_do_hud_tem_altura_suficiente_para_o_conteudo():
+    # titulo, linha de HP, linha de XP e o rodape (valor + rotulo), tudo
+    # medido pela altura REAL da linha e nao pelo tamanho nominal da fonte.
+    conteudo = (
+        altura_da_linha("titulo")
+        + altura_da_linha("media") * 2
+        + altura_da_linha("media")
+        + altura_da_linha("minima")
+    )
+    assert ALTURA_HUD - TOPO_HUD > conteudo

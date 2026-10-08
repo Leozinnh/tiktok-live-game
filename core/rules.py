@@ -190,6 +190,11 @@ class RuleEngine:
         quantidade = max(1, event.quantity)
         teto = int(rule.get("max_multiplier", 0))
         if teto <= 0:
-            # Sem teto configurado, a quantidade manda.
-            return quantidade
+            # A validacao da config exige o teto quando ha escala por
+            # quantidade. Chegar aqui e config fora do config.json: sem teto
+            # nao escala, em vez de escalar sem limite.
+            logger.warning(
+                "Regra com scale_with_quantity sem max_multiplier: escala ignorada."
+            )
+            return 1
         return max(1, min(quantidade, teto))
