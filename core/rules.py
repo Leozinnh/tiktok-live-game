@@ -1,134 +1,195 @@
 import logging
-import time
 import unicodedata
-from collections import defaultdict
 
-from core.events import LiveEvent
+from core.events import EventType, LiveEvent
+from core.ratelimit import RateLimiter
 
 logger = logging.getLogger(__name__)
 
 
 def normalize(text: str) -> str:
-    text = text or ""
-    text = unicodedata.normalize("NFKD", text)
-    text = "".join(c for c in text if not unicodedata.combining(c))
-    return text.lower().strip()
+    """Minusculo, sem acento e sem espaco nas pontas, para casar comandos."""
+    texto = text or ""
+    texto = unicodedata.normalize("NFKD", texto)
+    texto = "".join(c for c in texto if not unicodedata.combining(c))
+    return texto.lower().strip()
 
 
 class RuleEngine:
-    """
-    Traduz LiveEvent -> ação do GameEngine.
+    """Traduz LiveEvent em acao do GameEngine.
 
-    Novas regras são adicionadas no config.json.
-    Novas ações são adicionadas no GameEngine, sem alterar a integração TikTok.
+    Regras novas entram no config.json. Acoes novas entram no registro de
+    `game/actions.py`. A integracao com o TikTok nao precisa saber de nada disso.
     """
 
-    def __init__(self, config: dict, game):
+    def __init__(
+        self,
+        config: dict,
+        game,
+        limiter: RateLimiter | None = None,
+        on_event=None,
+    ):
         self.rules = config["rules"]
         self.game = game
-        self.cooldowns = {}
-        self.like_total = 0
-        self.like_milestones = defaultdict(int)
+        self.limiter = limiter or RateLimiter()
+        self.on_event = on_event
 
-    def process(self, event: LiveEvent):
-        if event.type == "gift":
-            self._gift(event)
-        elif event.type == "comment":
-            self._comment(event)
-        elif event.type == "like":
-            self._like(event)
-        elif event.type == "follow":
-            self._simple("follows", event)
-        elif event.type == "share":
-            self._simple("shares", event)
-        else:
-            logger.debug("Evento sem regra: %s", event.type)
+        # Likes: a fonte da verdade e o total acumulado da sala, que so cresce.
+        # Guardamos o maior total ja visto e o maior marco ja disparado por regra.
+        self._like_max = 0
+        self._like_ms: dict[int, int] = {}
 
-    def _allowed(self, key: str, cooldown: float) -> bool:
-        now = time.monotonic()
-        last = self.cooldowns.get(key, 0.0)
-        if now - last < cooldown:
-            return False
-        self.cooldowns[key] = now
-        return True
+    # ---------- entrada ----------
 
-    def _run_action(self, rule: dict, event: LiveEvent, multiplier: int = 1):
-        action = rule.get("action", "")
-        cooldown = float(rule.get("cooldown", 0))
-        key = f"{event.type}:{rule.get('gift', rule.get('contains', action))}"
+    def process(self, event: LiveEvent) -> None:
+        try:
+            if event.type == EventType.GIFT:
+                self._gift(event)
+            elif event.type == EventType.COMMENT:
+                self._comment(event)
+            elif event.type == EventType.LIKE:
+                self._like(event)
+            elif event.type == EventType.FOLLOW:
+                self._simple("follows", event, "follow")
+            elif event.type == EventType.SHARE:
+                self._simple("shares", event, "share")
+            else:
+                logger.debug("Evento sem regra: %s", event.type)
+        except Exception:
+            # Uma regra mal configurada nao pode derrubar o loop do jogo.
+            logger.exception("Erro processando evento %s", event.type)
 
-        if not self._allowed(key, cooldown):
-            return
+        if self.on_event is not None:
+            try:
+                self.on_event(event)
+            except Exception:
+                logger.exception("Erro no gancho de log de evento")
 
-        payload = dict(rule)
-        payload["amount"] = rule.get("amount", 1) * multiplier
-        payload["xp"] = rule.get("xp", 0) * multiplier
+    # ---------- presentes ----------
 
-        self.game.apply_action(action, payload, event)
+    def _gift(self, event: LiveEvent) -> None:
+        nome = normalize(event.gift_name)
+        for indice, rule in enumerate(self.rules.get("gifts", [])):
+            nome_cfg = normalize(rule.get("gift", ""))
+            id_cfg = rule.get("gift_id")
 
-        logger.info(
-            "AÇÃO | usuário=%s | evento=%s | presente=%s | quantidade=%s | ação=%s",
-            event.actor(),
-            event.type,
-            event.gift_name,
-            event.quantity,
-            action,
-        )
-
-    def _gift(self, event: LiveEvent):
-        gift_name = normalize(event.gift_name)
-        for rule in self.rules.get("gifts", []):
-            configured_name = normalize(rule.get("gift", ""))
-
-            id_match = (
-                rule.get("gift_id") is not None
+            casa_id = (
+                id_cfg is not None
                 and event.gift_id is not None
-                and str(rule["gift_id"]) == str(event.gift_id)
+                and str(id_cfg) == str(event.gift_id)
             )
+            casa_nome = bool(nome_cfg) and nome_cfg == nome
 
-            name_match = configured_name and configured_name == gift_name
-
-            if name_match or id_match:
-                # Para streaks, a integração já entrega quantity/contagem.
-                self._run_action(rule, event, max(1, event.quantity))
+            if casa_id or casa_nome:
+                self._run_action(rule, event, f"gift:{indice}:{nome_cfg or id_cfg}")
                 return
 
-    def _comment(self, event: LiveEvent):
-        text = normalize(event.text)
-        for rule in self.rules.get("comments", []):
-            term = normalize(rule.get("contains", ""))
-            if term and term in text:
-                self._run_action(rule, event)
-                # Um comentário pode disparar várias regras diferentes.
-        return
+    # ---------- comentarios ----------
 
-    def _like(self, event: LiveEvent):
-        amount = max(1, event.like_count or event.quantity or 1)
-        old_total = self.like_total
-        self.like_total += amount
+    def _comment(self, event: LiveEvent) -> None:
+        texto = normalize(event.text)
+        if not texto:
+            return
+        for indice, rule in enumerate(self.rules.get("comments", [])):
+            termo = normalize(rule.get("contains", ""))
+            if termo and termo in texto:
+                # Um comentario pode disparar varias regras diferentes.
+                self._run_action(rule, event, f"comment:{indice}:{termo}")
 
-        for index, rule in enumerate(self.rules.get("likes", [])):
+    # ---------- likes ----------
+
+    def _like(self, event: LiveEvent) -> None:
+        total = max(self._like_max, int(event.like_total or 0))
+        self._like_max = total
+
+        for indice, rule in enumerate(self.rules.get("likes", [])):
             every = int(rule.get("every", 0))
             if every <= 0:
                 continue
 
-            old_milestone = old_total // every
-            new_milestone = self.like_total // every
+            marco_atual = total // every
+            marco_anterior = self._like_ms.get(indice, 0)
+            if marco_atual <= marco_anterior:
+                continue
 
-            for milestone in range(old_milestone + 1, new_milestone + 1):
-                # Cooldown 0 permite que milestones distintos sejam processados.
-                self._run_action(
-                    rule,
-                    event,
-                    multiplier=1,
-                )
-                logger.info(
-                    "LIKE MILESTONE | total=%s | milestone=%s | every=%s",
-                    self.like_total,
-                    milestone,
-                    every,
-                )
+            disparos = marco_atual - marco_anterior
+            self._like_ms[indice] = marco_atual
 
-    def _simple(self, section: str, event: LiveEvent):
-        for rule in self.rules.get(section, []):
-            self._run_action(rule, event)
+            # Cada marco cruzado dispara UMA vez. O cooldown da regra nao
+            # participa desta decisao: se participasse, o segundo marco da
+            # mesma rajada seria descartado em silencio.
+            for _ in range(disparos):
+                payload = self._payload(rule, event, multiplier=1)
+                self.game.apply_action(rule["action"], payload, event)
+
+            logger.info(
+                "LIKE MILESTONE | total=%s | every=%s | disparos=%s",
+                total,
+                every,
+                disparos,
+            )
+
+    # ---------- follow e share ----------
+
+    def _simple(self, secao: str, event: LiveEvent, chave: str) -> None:
+        for indice, rule in enumerate(self.rules.get(secao, [])):
+            self._run_action(rule, event, f"{chave}:{indice}")
+
+    # ---------- execucao ----------
+
+    @staticmethod
+    def _payload(rule: dict, event: LiveEvent, multiplier: int = 1) -> dict:
+        payload = dict(rule)
+        payload["amount"] = int(rule.get("amount", 1)) * multiplier
+        payload["xp"] = int(rule.get("xp", 0)) * multiplier
+        return payload
+
+    def _run_action(self, rule: dict, event: LiveEvent, chave: str) -> None:
+        acao = rule.get("action")
+        if not acao:
+            return
+
+        if event.type == EventType.GIFT and not self._passa_min_quantity(rule, event):
+            return
+
+        permitido = self.limiter.allow_rule(
+            rule_key=chave,
+            cooldown=float(rule.get("cooldown", 0)),
+            actor=event.actor(),
+            per_user_cooldown=float(rule.get("per_user_cooldown", 0)),
+        )
+        if not permitido:
+            return
+
+        if not self.limiter.allow_action(acao):
+            logger.debug("Orcamento global esgotado para a acao %s", acao)
+            return
+
+        multiplicador = self._multiplicador(rule, event)
+        payload = self._payload(rule, event, multiplicador)
+        self.game.apply_action(acao, payload, event)
+
+        logger.info(
+            "ACTION | usuario=%s | evento=%s | presente=%s | qtd=%s | acao=%s",
+            event.actor(),
+            event.type,
+            event.gift_name,
+            event.quantity,
+            acao,
+        )
+
+    @staticmethod
+    def _passa_min_quantity(rule: dict, event: LiveEvent) -> bool:
+        minimo = int(rule.get("min_quantity", 1))
+        return max(1, event.quantity) >= minimo
+
+    @staticmethod
+    def _multiplicador(rule: dict, event: LiveEvent) -> int:
+        if not rule.get("scale_with_quantity"):
+            return 1
+        quantidade = max(1, event.quantity)
+        teto = int(rule.get("max_multiplier", 0))
+        if teto <= 0:
+            # Sem teto configurado, a quantidade manda.
+            return quantidade
+        return max(1, min(quantidade, teto))

@@ -110,6 +110,17 @@ def _acao_spawn_enemy(engine: GameEngine, payload: dict, event: LiveEvent) -> No
         _anunciar(engine, event, "invocou inimigos", f"+{criados}")
 
 
+@register("steer")
+def _acao_steer(engine: GameEngine, payload: dict, event: LiveEvent) -> None:
+    """Direcao vinda de comentario. `amount` negativo vai para a esquerda.
+
+    Nao empurra anuncio de proposito: numa enxurrada de comentarios de
+    direcao, o feed viraria so "comandou DIREITA" e esconderia os presentes.
+    Quem mostra a direcao e a faixa de intencao do HUD.
+    """
+    engine.steer(float(payload.get("amount", 1)))
+
+
 @register("special")
 def _acao_special(engine: GameEngine, payload: dict, event: LiveEvent) -> None:
     engine.state.effects.activate("special", float(payload.get("duration", 5)))
