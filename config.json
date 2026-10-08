@@ -1,0 +1,170 @@
+{
+  "app": {
+    "fps": 60,
+    "queue_max_size": 5000,
+    "events_per_frame": 20,
+    "recent_events": 12,
+    "window_width": 1280,
+    "window_height": 720
+  },
+  "tiktok": {
+    "username": "@meninodolancer",
+    "reconnect_seconds": 5,
+    "fetch_gift_info": true
+  },
+  "game": {
+    "max_hp": 100,
+    "initial_hp": 100,
+    "initial_xp": 0,
+    "initial_level": 1,
+    "initial_speed": 220,
+    "xp_per_level": 100,
+    "base_enemy_damage": 5
+  },
+  "rules": {
+    "gifts": [
+      {
+        "gift": "Rose",
+        "gift_id": null,
+        "action": "xp",
+        "amount": 1,
+        "xp": 5,
+        "duration": 0,
+        "cooldown": 0.2
+      },
+      {
+        "gift": "Heart Me",
+        "gift_id": null,
+        "action": "run",
+        "amount": 1,
+        "duration": 3,
+        "cooldown": 1
+      },
+      {
+        "gift": "GG",
+        "gift_id": null,
+        "action": "jump",
+        "amount": 1,
+        "duration": 0.8,
+        "cooldown": 0.5
+      },
+      {
+        "gift": "Finger Heart",
+        "gift_id": null,
+        "action": "xp",
+        "amount": 1,
+        "xp": 25,
+        "duration": 0,
+        "cooldown": 0.5
+      },
+      {
+        "gift": "Ice Cream Cone",
+        "gift_id": null,
+        "action": "heal",
+        "amount": 15,
+        "duration": 0,
+        "cooldown": 1
+      },
+      {
+        "gift": "Doughnut",
+        "gift_id": null,
+        "action": "speed",
+        "amount": 80,
+        "duration": 5,
+        "cooldown": 2
+      },
+      {
+        "gift": "Perfume",
+        "gift_id": null,
+        "action": "shield",
+        "amount": 1,
+        "duration": 5,
+        "cooldown": 2
+      },
+      {
+        "gift": "Cap",
+        "gift_id": null,
+        "action": "spawn_enemy",
+        "amount": 1,
+        "duration": 0,
+        "cooldown": 1
+      },
+      {
+        "gift": "Confetti",
+        "gift_id": null,
+        "action": "damage_all",
+        "amount": 20,
+        "duration": 0,
+        "cooldown": 2
+      },
+      {
+        "gift": "TikTok",
+        "gift_id": null,
+        "action": "rage",
+        "amount": 1,
+        "duration": 8,
+        "cooldown": 3
+      },
+      {
+        "gift": "Lion",
+        "gift_id": null,
+        "action": "mega",
+        "amount": 1,
+        "duration": 10,
+        "cooldown": 10
+      }
+    ],
+    "comments": [
+      {
+        "contains": "corre",
+        "action": "run",
+        "amount": 1,
+        "duration": 3,
+        "cooldown": 2
+      },
+      {
+        "contains": "xp",
+        "action": "xp",
+        "amount": 1,
+        "xp": 10,
+        "duration": 0,
+        "cooldown": 1
+      },
+      {
+        "contains": "pula",
+        "action": "jump",
+        "amount": 1,
+        "duration": 0.8,
+        "cooldown": 1
+      }
+    ],
+    "likes": [
+      {
+        "every": 100,
+        "action": "xp",
+        "amount": 1,
+        "xp": 20,
+        "duration": 0,
+        "cooldown": 0
+      }
+    ],
+    "follows": [
+      {
+        "action": "xp",
+        "amount": 1,
+        "xp": 15,
+        "duration": 0,
+        "cooldown": 0.5
+      }
+    ],
+    "shares": [
+      {
+        "action": "xp",
+        "amount": 1,
+        "xp": 10,
+        "duration": 0,
+        "cooldown": 0.5
+      }
+    ]
+  }
+}
