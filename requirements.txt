@@ -1,2 +1,5 @@
-TikTokLive>=7.0.0,<8.0.0
-pygame>=2.6.0,<3.0.0
+pygame-ce==2.5.8
+TikTokLive==7.0.1
+
+# Desenvolvimento
+pytest==8.3.4
