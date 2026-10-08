@@ -1,15 +1,18 @@
 {
   "app": {
     "fps": 60,
+    "window_width": 1080,
+    "window_height": 1920,
+    "render_scale": 1.0,
     "queue_max_size": 5000,
-    "events_per_frame": 20,
-    "recent_events": 12,
-    "window_width": 1280,
-    "window_height": 720
+    "events_per_frame": 25,
+    "feed_size": 6,
+    "announce_ttl": 4.0
   },
   "tiktok": {
-    "username": "@meninodolancer",
+    "username": "@SEU_USUARIO",
     "reconnect_seconds": 5,
+    "reconnect_max_seconds": 60,
     "fetch_gift_info": true
   },
   "game": {
@@ -19,7 +22,21 @@
     "initial_level": 1,
     "initial_speed": 220,
     "xp_per_level": 100,
-    "base_enemy_damage": 5
+    "xp_level_step": 25,
+    "base_enemy_damage": 5,
+    "intent_half_life": 1.5,
+    "intent_accel": 1800.0,
+    "intent_max_speed": 420.0,
+    "intent_friction": 6.0
+  },
+  "limits": {
+    "max_enemies": 40,
+    "action_budget": {
+      "spawn_enemy": 4.0,
+      "boss": 0.5,
+      "special": 1.0,
+      "mega": 0.5
+    }
   },
   "rules": {
     "gifts": [
@@ -27,43 +44,46 @@
         "gift": "Rose",
         "gift_id": null,
         "action": "xp",
-        "amount": 1,
         "xp": 5,
-        "duration": 0,
-        "cooldown": 0.2
+        "min_quantity": 1,
+        "scale_with_quantity": true,
+        "max_multiplier": 50,
+        "cooldown": 0.2,
+        "per_user_cooldown": 0.5
       },
       {
         "gift": "Heart Me",
         "gift_id": null,
         "action": "run",
-        "amount": 1,
         "duration": 3,
-        "cooldown": 1
+        "cooldown": 1,
+        "per_user_cooldown": 3
       },
       {
         "gift": "GG",
         "gift_id": null,
         "action": "jump",
-        "amount": 1,
         "duration": 0.8,
-        "cooldown": 0.5
+        "cooldown": 0.5,
+        "per_user_cooldown": 1
       },
       {
         "gift": "Finger Heart",
         "gift_id": null,
         "action": "xp",
-        "amount": 1,
         "xp": 25,
-        "duration": 0,
-        "cooldown": 0.5
+        "cooldown": 0.5,
+        "per_user_cooldown": 2
       },
       {
         "gift": "Ice Cream Cone",
         "gift_id": null,
         "action": "heal",
         "amount": 15,
-        "duration": 0,
-        "cooldown": 1
+        "scale_with_quantity": true,
+        "max_multiplier": 10,
+        "cooldown": 1,
+        "per_user_cooldown": 2
       },
       {
         "gift": "Doughnut",
@@ -71,99 +91,134 @@
         "action": "speed",
         "amount": 80,
         "duration": 5,
-        "cooldown": 2
+        "cooldown": 2,
+        "per_user_cooldown": 5
       },
       {
         "gift": "Perfume",
         "gift_id": null,
         "action": "shield",
-        "amount": 1,
         "duration": 5,
-        "cooldown": 2
+        "cooldown": 2,
+        "per_user_cooldown": 6
       },
       {
         "gift": "Cap",
         "gift_id": null,
         "action": "spawn_enemy",
         "amount": 1,
-        "duration": 0,
-        "cooldown": 1
+        "scale_with_quantity": true,
+        "max_multiplier": 8,
+        "min_quantity": 1,
+        "cooldown": 1,
+        "per_user_cooldown": 3
       },
       {
         "gift": "Confetti",
         "gift_id": null,
-        "action": "damage_all",
+        "action": "damage",
         "amount": 20,
-        "duration": 0,
-        "cooldown": 2
+        "cooldown": 2,
+        "per_user_cooldown": 6
       },
       {
-        "gift": "TikTok",
+        "gift": "Hand Hearts",
         "gift_id": null,
         "action": "rage",
-        "amount": 1,
         "duration": 8,
-        "cooldown": 3
+        "cooldown": 3,
+        "per_user_cooldown": 10
+      },
+      {
+        "gift": "Corgi",
+        "gift_id": null,
+        "action": "special",
+        "duration": 5,
+        "min_quantity": 5,
+        "cooldown": 5,
+        "per_user_cooldown": 15
+      },
+      {
+        "gift": "Galaxy",
+        "gift_id": null,
+        "action": "boss",
+        "min_quantity": 1,
+        "cooldown": 10,
+        "per_user_cooldown": 30
       },
       {
         "gift": "Lion",
         "gift_id": null,
         "action": "mega",
-        "amount": 1,
         "duration": 10,
-        "cooldown": 10
+        "xp": 100,
+        "cooldown": 10,
+        "per_user_cooldown": 30
       }
     ],
     "comments": [
       {
-        "contains": "corre",
-        "action": "run",
+        "contains": "direita",
+        "action": "steer",
         "amount": 1,
-        "duration": 3,
-        "cooldown": 2
+        "cooldown": 0,
+        "per_user_cooldown": 0.4
       },
       {
-        "contains": "xp",
-        "action": "xp",
-        "amount": 1,
-        "xp": 10,
-        "duration": 0,
-        "cooldown": 1
+        "contains": "esquerda",
+        "action": "steer",
+        "amount": -1,
+        "cooldown": 0,
+        "per_user_cooldown": 0.4
+      },
+      {
+        "contains": "corre",
+        "action": "run",
+        "duration": 3,
+        "cooldown": 2,
+        "per_user_cooldown": 5
       },
       {
         "contains": "pula",
         "action": "jump",
-        "amount": 1,
         "duration": 0.8,
-        "cooldown": 1
+        "cooldown": 1,
+        "per_user_cooldown": 2
+      },
+      {
+        "contains": "xp",
+        "action": "xp",
+        "xp": 10,
+        "cooldown": 1,
+        "per_user_cooldown": 3
       }
     ],
     "likes": [
       {
         "every": 100,
         "action": "xp",
-        "amount": 1,
         "xp": 20,
-        "duration": 0,
+        "cooldown": 0
+      },
+      {
+        "every": 1000,
+        "action": "heal",
+        "amount": 25,
         "cooldown": 0
       }
     ],
     "follows": [
       {
         "action": "xp",
-        "amount": 1,
         "xp": 15,
-        "duration": 0,
-        "cooldown": 0.5
+        "cooldown": 0
       }
     ],
     "shares": [
       {
         "action": "xp",
-        "amount": 1,
         "xp": 10,
-        "duration": 0,
-        "cooldown": 0.5
+        "cooldown": 0
       }
     ]
   }

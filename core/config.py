@@ -15,6 +15,10 @@ SECOES_DE_REGRA = ("gifts", "comments", "likes", "follows", "shares")
 # nao tem o que capturar.
 JANELA_MINIMA = 240
 
+# O config.json e entregue com este placeholder. O modo LIVE recusa; o
+# modo teste aceita, porque nao conecta ao TikTok.
+PLACEHOLDER_USERNAME = "@SEU_USUARIO"
+
 DEFAULTS: dict[str, Any] = {
     "app": {
         "fps": 60,
@@ -87,13 +91,26 @@ def _validar_regra(regra: dict, onde: str) -> None:
         if campo in regra:
             _exigir_numero(regra[campo], onde, campo)
 
-    for campo in ("amount", "xp", "min_quantity", "max_multiplier"):
+    for campo in ("xp", "min_quantity", "max_multiplier"):
         if campo in regra:
             _exigir_numero(regra[campo], onde, campo)
 
+    # `amount` pode ser negativo: a regra de "esquerda" manda amount -1 e o
+    # handler de `steer` usa o sinal como direcao.
+    if "amount" in regra and not isinstance(regra["amount"], (int, float)):
+        raise ConfigError(f"{onde}: campo 'amount' precisa ser numero, veio {regra['amount']!r}.")
+    if "amount" in regra and isinstance(regra["amount"], bool):
+        raise ConfigError(f"{onde}: campo 'amount' precisa ser numero, veio {regra['amount']!r}.")
 
-def validate_config(config: dict) -> None:
-    """Valida e completa a configuracao. Levanta ConfigError se algo estiver errado."""
+
+def validate_config(config: dict, exigir_username: bool = True) -> None:
+    """Valida e completa a configuracao. Levanta ConfigError se algo estiver errado.
+
+    `exigir_username=False` aceita o config.json recem-clonado, que ainda
+    traz o placeholder. O modo teste (`main.py --test`) NAO conecta ao
+    TikTok, entao nao precisa de username real; o modo LIVE passa
+    `exigir_username=True` e recusa o placeholder.
+    """
     if not isinstance(config, dict):
         raise ConfigError("A configuracao precisa ser um objeto JSON na raiz.")
 
@@ -104,7 +121,7 @@ def validate_config(config: dict) -> None:
     _merge_defaults(config, DEFAULTS)
 
     username = str(config["tiktok"].get("username", "")).strip()
-    if not username or username == "@SEU_USUARIO":
+    if exigir_username and (not username or username == PLACEHOLDER_USERNAME):
         raise ConfigError(
             "Edite config.json e coloque o username real da LIVE em tiktok.username."
         )
@@ -165,7 +182,7 @@ def validate_config(config: dict) -> None:
         _exigir_numero(limites["max_enemies"], "limits", "max_enemies", minimo=1)
 
 
-def load_config(path: str | Path) -> dict:
+def load_config(path: str | Path, exigir_username: bool = True) -> dict:
     arquivo = Path(path)
     if not arquivo.exists():
         raise ConfigError(f"Configuracao nao encontrada: {arquivo}")
@@ -178,5 +195,5 @@ def load_config(path: str | Path) -> dict:
             f"{arquivo} nao e um JSON valido: linha {erro.lineno}, coluna {erro.colno} ({erro.msg})."
         ) from erro
 
-    validate_config(config)
+    validate_config(config, exigir_username=exigir_username)
     return config
