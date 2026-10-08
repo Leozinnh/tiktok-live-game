@@ -14,15 +14,19 @@
 */
 
 import * as THREE from './vendor/three.module.min.js';
-import { ARENA, CHAO, ESCALA, criarCamera, enquadrar, jx, jz, nevoaDaCamera } from './camera.js';
+import { CHAO, ESCALA, PISO, criarCamera, enquadrar, jx, jz, nevoaDaCamera } from './camera.js';
 
 // ------------------------------------------------------------------ cores
 
 const COR = {
   fundo: 0x0e1018,
+  terreno: 0x161a26,
   chao: 0x3a4052,
   grade: 0x262c3c,
+  borda: 0x8092c4,
   personagem: 0xfad658,
+  membro: 0xc9971f,
+  cabeca: 0xfff2c4,
   inimigo: 0xe85258,
   boss: 0xa834c8,
   hp: 0xe8484e,
@@ -72,29 +76,80 @@ cena.add(sol);
 
 // ------------------------------------------------------------- o chao
 
-// O chao e a mesma constante que a nevoa usa para saber onde terminar. Se
-// os dois saissem de contas diferentes, a aresta do plano apareceria.
-const chao = new THREE.Mesh(
-  new THREE.PlaneGeometry(CHAO.largura, CHAO.profundidade),
-  new THREE.MeshStandardMaterial({ color: COR.chao, roughness: 0.95, metalness: 0 }),
-);
-chao.rotation.x = -Math.PI / 2;
-chao.position.z = CHAO.centroZ;
-chao.receiveShadow = true;
-cena.add(chao);
+/*
+  Duas superficies, e a diferenca entre elas e a informacao mais
+  importante da tela.
 
-// Grade por cima do chao. E o que da a referencia de movimento quando o
-// personagem anda: sem ela, um fundo liso nao mostra velocidade nenhuma.
-const grade = new THREE.GridHelper(
-  CHAO.profundidade,
-  Math.round(CHAO.profundidade),
-  COR.grade,
-  COR.grade,
+  Antes havia um plano so, do mesmo tom, com a grade repetida ate onde a
+  vista alcancava. O resultado era o personagem parado no meio do nada: um
+  grid uniforme e infinito nao diz onde o jogo acontece, e o olho nao tem
+  como saber se ele esta no centro ou ja saiu pela borda. Agora o piso da
+  arena e mais claro e mais alto, com a grade so dentro dele, e em volta
+  fica o terreno escuro — que a nevoa come. A fronteira entre os dois e o
+  limite do jogo, visivel o tempo todo.
+*/
+
+// O terreno e a mesma constante que a nevoa usa para saber onde terminar.
+// Se os dois saissem de contas diferentes, a aresta do plano apareceria.
+const terreno = new THREE.Mesh(
+  new THREE.PlaneGeometry(CHAO.largura, CHAO.profundidade),
+  new THREE.MeshStandardMaterial({ color: COR.terreno, roughness: 1, metalness: 0 }),
 );
-grade.position.set(0, 0.01, CHAO.centroZ);
-grade.material.transparent = true;
-grade.material.opacity = 0.55;
+terreno.rotation.x = -Math.PI / 2;
+terreno.position.z = CHAO.centroZ;
+terreno.receiveShadow = true;
+cena.add(terreno);
+
+// O piso. Dois centimetros acima do terreno: o bastante para nao brigar por
+// pixel (z-fighting), de menos para o pe do personagem afundar.
+const piso = new THREE.Mesh(
+  new THREE.PlaneGeometry(PISO.largura, PISO.profundidade),
+  new THREE.MeshStandardMaterial({ color: COR.chao, roughness: 0.9, metalness: 0 }),
+);
+piso.rotation.x = -Math.PI / 2;
+piso.position.set(0, 0.02, PISO.centroZ);
+piso.receiveShadow = true;
+cena.add(piso);
+
+/*
+  Grade retangular, feita a mao. O `GridHelper` do Three.js so faz
+  quadrados, e o piso nao e quadrado (12,0 x 11,7) — um quadrado do lado
+  maior passaria por fora do piso e a grade vazaria para o terreno.
+*/
+function gradeRetangular(largura, profundidade, passos, cor) {
+  const meiaL = largura / 2;
+  const meiaP = profundidade / 2;
+  const pontos = [];
+  for (let i = 0; i <= passos; i++) {
+    const x = -meiaL + (largura * i) / passos;
+    const z = -meiaP + (profundidade * i) / passos;
+    pontos.push(new THREE.Vector3(x, 0, -meiaP), new THREE.Vector3(x, 0, meiaP));
+    pontos.push(new THREE.Vector3(-meiaL, 0, z), new THREE.Vector3(meiaL, 0, z));
+  }
+  return new THREE.LineSegments(
+    new THREE.BufferGeometry().setFromPoints(pontos),
+    new THREE.LineBasicMaterial({ color: cor, transparent: true, opacity: 0.5 }),
+  );
+}
+
+// A grade da a referencia de movimento: sem ela, um piso liso nao mostra
+// velocidade nenhuma. Uma celula por metro, como antes.
+const grade = gradeRetangular(PISO.largura, PISO.profundidade, Math.round(PISO.profundidade), COR.grade);
+grade.position.set(0, 0.03, PISO.centroZ);
 cena.add(grade);
+
+// A borda, por cima de tudo: e ela que responde "ate onde eu posso ir".
+const borda = new THREE.LineLoop(
+  new THREE.BufferGeometry().setFromPoints([
+    new THREE.Vector3(-PISO.largura / 2, 0, PISO.topo),
+    new THREE.Vector3(PISO.largura / 2, 0, PISO.topo),
+    new THREE.Vector3(PISO.largura / 2, 0, PISO.base),
+    new THREE.Vector3(-PISO.largura / 2, 0, PISO.base),
+  ]),
+  new THREE.LineBasicMaterial({ color: COR.borda, transparent: true, opacity: 0.7 }),
+);
+borda.position.y = 0.04;
+cena.add(borda);
 
 // ------------------------------------------------------------- enquadre
 
@@ -128,11 +183,27 @@ new ResizeObserver(redimensionar).observe(palco);
 */
 function criarPersonagem() {
   const grupo = new THREE.Group();
-  const material = new THREE.MeshStandardMaterial({
-    color: COR.personagem, roughness: 0.45, metalness: 0.1,
-  });
 
-  const peca = (w, h, d, x, y, z) => {
+  /*
+    Tres tons, e nao um so. Com tudo amarelo o personagem virava uma mancha:
+    as pecas se encostam (o tronco termina em 1,38 e a cabeca comeca em
+    1,40) e nada separava cabeca, tronco e membro na silhueta. De longe, num
+    celular, o publico via um retangulo amarelo andando.
+
+    O tronco ficou mais estreito pelo mesmo motivo: com 0,78 de largura ele
+    encostava nos bracos, e um vao de 4 cm e o que faz o bracos aparecerem.
+    Os bracos NAO se moveram — `PASSEIO.corpo` em camera.js conta com eles
+    em +-0,49.
+  */
+  const tom = (cor) =>
+    new THREE.MeshStandardMaterial({ color: cor, roughness: 0.45, metalness: 0.1 });
+  const materiais = {
+    corpo: tom(COR.personagem),
+    cabeca: tom(COR.cabeca),
+    membro: tom(COR.membro),
+  };
+
+  const peca = (material, w, h, d, x, y, z) => {
     const malha = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), material);
     malha.position.set(x, y, z);
     malha.castShadow = true;
@@ -140,12 +211,35 @@ function criarPersonagem() {
     return malha;
   };
 
-  const corpo = peca(0.78, 0.92, 0.52, 0, 0.92, 0);
-  const cabeca = peca(0.54, 0.52, 0.52, 0, 1.66, 0);
-  const bracoE = peca(0.2, 0.62, 0.2, -0.49, 0.86, 0);
-  const bracoD = peca(0.2, 0.62, 0.2, 0.49, 0.86, 0);
-  const pernaE = peca(0.24, 0.52, 0.24, -0.19, 0.20, 0);
-  const pernaD = peca(0.24, 0.52, 0.24, 0.19, 0.20, 0);
+  /*
+    Braco e perna giram na ARTICULACAO, nao no meio da peca.
+
+    Girar a caixa no proprio centro faz o membro girar como helice: o ombro
+    vai para tras enquanto a mao vai para a frente, que e o oposto de
+    andar. Com o pivo no ombro, o membro inteiro vai para o mesmo lado —
+    e so isso que faz uma caminhada parecer caminhada.
+
+    As medidas nao mudaram: pivo em 1,17 com a caixa pendurada 0,31 abaixo
+    poe o braco de novo entre 0,55 e 1,17, exatamente onde estava.
+  */
+  const membro = (w, h, d, x, ombro) => {
+    const pivo = new THREE.Group();
+    pivo.position.set(x, ombro, 0);
+    const malha = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mMembro);
+    malha.position.y = -h / 2;
+    malha.castShadow = true;
+    pivo.add(malha);
+    grupo.add(pivo);
+    return pivo;
+  };
+
+  const { corpo: mCorpo, cabeca: mCabeca, membro: mMembro } = materiais;
+  const corpo = peca(mCorpo, 0.7, 0.92, 0.52, 0, 0.92, 0);
+  const cabeca = peca(mCabeca, 0.54, 0.52, 0.52, 0, 1.7, 0);
+  const bracoE = membro(0.2, 0.62, 0.2, -0.49, 1.17);
+  const bracoD = membro(0.2, 0.62, 0.2, 0.49, 1.17);
+  const pernaE = membro(0.24, 0.52, 0.24, -0.19, 0.46);
+  const pernaD = membro(0.24, 0.52, 0.24, 0.19, 0.46);
 
   // Escudo: esfera translucida, escondida ate o efeito entrar.
   const escudo = new THREE.Mesh(
@@ -158,7 +252,7 @@ function criarPersonagem() {
   escudo.visible = false;
   grupo.add(escudo);
 
-  grupo.userData = { corpo, cabeca, bracoE, bracoD, pernaE, pernaD, escudo, material };
+  grupo.userData = { corpo, cabeca, bracoE, bracoD, pernaE, pernaD, escudo, materiais };
   return grupo;
 }
 
@@ -463,16 +557,30 @@ function animar() {
 
     // --- personagem
     const c = personagem.userData;
-    const andando = Math.abs(d.character.x - personagem.position.x) > 0.005;
+
+    /*
+      "Esta andando?" e a distancia que ainda falta percorrer, em unidades
+      do MUNDO. Comparar `d.character.x` (unidades do jogo, 0..1080) com
+      `personagem.position.x` (mundo, -5,4..5,4) dava sempre verdadeiro: o
+      boneco ficava parado batendo as pernas, com a cabeca a 5 unidades de
+      distancia do proprio corpo. Estes dois numeros so podem ser
+      comparados depois de convertidos — e o destino em `alvo` ja esta
+      convertido, porque foi `jx()` quem o escreveu.
+    */
+    const destinoX = alvo.get(personagem)?.x;
+    const andando =
+      destinoX !== undefined && Math.abs(destinoX - personagem.position.x) > 0.03;
     const passo = Math.sin(tempo * 11) * (andando ? 0.24 : 0.05);
     c.pernaE.rotation.x = passo;
     c.pernaD.rotation.x = -passo;
     c.bracoE.rotation.x = -passo * 0.7;
     c.bracoD.rotation.x = passo * 0.7;
-    c.corpo.position.y = 0.92 + Math.abs(Math.sin(tempo * 5.5)) * 0.035;
 
-    // y_offset e o pulo, em unidades do jogo.
-    personagem.position.y = (d.character.y_offset ?? 0) / ESCALA;
+    // y_offset e o pulo, em unidades do jogo. A respiracao soma aqui, no
+    // grupo inteiro: antes ela mexia so o tronco e a cabeca ficava parada
+    // no ar, com o pescoco abrindo e fechando.
+    personagem.position.y =
+      (d.character.y_offset ?? 0) / ESCALA + Math.abs(Math.sin(tempo * 5.5)) * 0.035;
 
     // facing: -1 encara a esquerda. Vira o grupo inteiro.
     personagem.rotation.y = d.character.facing >= 0 ? 0 : Math.PI;
@@ -483,10 +591,13 @@ function animar() {
       c.escudo.scale.setScalar(pulso);
     }
 
-    // mega: o personagem cresce e passa a brilhar.
+    // mega: o personagem cresce e passa a brilhar. O brilho vai nos tres
+    // tons — acender so um faria a peca mais clara virar a unica visivel.
     const mega = 'mega' in viva;
-    c.material.emissive.setHex(mega ? COR.mega : 0x000000);
-    c.material.emissiveIntensity = mega ? 0.6 : 0;
+    for (const material of Object.values(c.materiais)) {
+      material.emissive.setHex(mega ? COR.mega : 0x000000);
+      material.emissiveIntensity = mega ? 0.6 : 0;
+    }
     personagem.scale.setScalar(mega ? 1.35 : 1);
 
     // --- inimigos

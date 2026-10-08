@@ -459,18 +459,28 @@ LIVE já está no ar e travando.
 
 ### O que dá e o que não dá para conferir sem navegador
 
-O desenho em si só se vê abrindo a página. Duas coisas, porém, são geometria pura e foram
-conferidas rodando o **Three.js de verdade** no Node — inclusive a mais traiçoeira:
+Duas coisas são geometria pura e foram conferidas rodando o **Three.js de verdade** no Node —
+inclusive as duas mais traiçoeiras:
 
 - **A névoa.** Com um `Fog` de alcance fixo, a câmera ficava a 19 unidades e a nevoa
   começava a 16: a arena inteira aparecia lavada, justamente no fundo da tela, que é de onde
   os inimigos vêm. Agora o alcance é **calculado a partir da posição da câmera** e recalculado
   a cada redimensionamento.
-- **O enquadramento.** O personagem anda até a borda de baixo, que é onde a câmera inclinada
-  cobre menos mundo. Os extremos são projetados e conferidos um a um.
+- **O enquadramento.** O que a câmera tem de enquadrar **não é a arena, é tudo que pode
+  aparecer nela**: as quatro quinas e o personagem encostado nas duas paredes, do pé à
+  cabeça. Enquadrar só as quinas deixava a cabeça dele sair pela borda direita
+  (`ndc.x = 1,006`) — e o defeito só aparecia depois que alguém mandava o boneco para lá, ao
+  vivo. A lista vive em `pontosObrigatorios()`, e é ela que o teste usa.
 
-O que **não** foi verificado, porque exigiria abrir o navegador nesta máquina: o resultado
-visual da iluminação, das sombras e das animações. A seção 14 lista isso em detalhe.
+Rode você mesmo, sem abrir nada:
+
+```
+node .superpowers/sdd/<plano>/verifica_camera.mjs
+```
+
+O resto — iluminação, sombras, animações — só se vê abrindo a página. A imagem foi conferida
+com **Chrome em modo headless** (`--screenshot`), que é como os defeitos de enquadramento
+foram encontrados; a seção 14 lista o que continua sem conferência.
 
 ### Ajustar a câmera
 
@@ -479,13 +489,16 @@ Tudo fica em `web/camera.js`, com os números medidos em comentário:
 | Constante | O que faz |
 |---|---|
 | `INCLINACAO` | ângulo da câmera, em graus, medido do chão. `45` é o padrão |
+| `CAMPO_DE_VISAO` | abertura da lente. Estreita (`26`) de propósito — ver abaixo |
 | `ALTURA_ALVO` | altura do ponto que a câmera olha |
-| `SOBRA_CHAO` | quanto de chão existe além da arena — é para onde a névoa se dissolve |
+| `SOBRA_CHAO` | quanto de chão existe além do piso — é para onde a névoa se dissolve |
+| `PASSEIO` | até onde o personagem vai, contando o corpo dele |
 
-Aos 45° o personagem ocupa ~8,7% da altura do painel e a arena ocupa 56% do quadro. **Não é
-chute:** subir a inclinação enche mais o quadro *e* encolhe o personagem ao mesmo tempo
-(aos 70° ele vira um risco de 0,8%), então 45 é o meio-termo. A tabela completa está no
-comentário da constante `INCLINACAO`.
+Aos 45° o personagem ocupa ~9,3% da altura do painel e o piso ocupa 56% do quadro. **Não é
+chute:** as duas tabelas de medição estão no comentário das constantes — subir a inclinação
+enche mais o quadro *e* encolhe o personagem ao mesmo tempo (aos 60° ele vira um risco de
+5,6%), e fechar a lente devolve tamanho sem custar quadro nenhum. A câmera fica a ~32
+unidades em qualquer um dos casos, porque quem manda na distância é o personagem na parede.
 
 ---
 
@@ -576,7 +589,8 @@ Verificado nesta máquina, rodando os comandos exatamente como estão escritos a
 | A sequência de REPL da seção 4 | `Rose 10` = +50 XP · `like 250` = 2 marcos · `Lion` = banner MEGA · `Galaxy` = chefe |
 | `--burst 2000` e `--burst 9000` | Sem travar. Com 9000, a fila enche em 5000 e descarta 4000 |
 | `--web`: HTTP + WebSocket ponta a ponta | 34 conferências: os arquivos são servidos, travessia de caminho é recusada, e um retrato chega por WebSocket com o personagem dentro |
-| Enquadramento da câmera 3D (Three.js real, no Node) | Tudo cabe no quadro; a névoa não pega na arena; o personagem fica com 8,7% do painel |
+| Enquadramento da câmera 3D (Three.js real, no Node) | Tudo cabe no quadro — inclusive o personagem nas duas paredes, do pé à cabeça; a névoa não pega no piso; o personagem fica com 9,3% do painel |
+| A imagem do renderer 3D (Chrome headless, 1080x1920) | O boneco anda e para na hora certa, os membros articulam no ombro, o piso e a borda marcam a área de jogo, e o personagem com escudo e mega continua dentro do quadro |
 | `--web`, fechar com conexão pendurada | Fecha em ~1 s, não em 10 s |
 | `--web` num ambiente sem tela | Roda: pygame não é importado neste modo |
 
@@ -589,15 +603,18 @@ Verificado nesta máquina, rodando os comandos exatamente como estão escritos a
   não foi testada. É exatamente para isso que existe o plano B do 3.12.
 - **A captura no OBS.** As configurações acima são as certas para 1080x1920, mas quem
   confirma é a prévia do OBS.
-- **O visual do renderer 3D.** A geometria foi conferida com o Three.js de verdade rodando no
-  Node (enquadramento, névoa, tamanho do personagem), mas **a imagem não foi vista por ninguém**:
-  não houve navegador nesta máquina. Iluminação, sombras, cores e o ritmo das animações são
-  exatamente o tipo de coisa que só se julga olhando. Abra a página antes da LIVE e ajuste
-  `web/jogo.js` — as cores estão todas no objeto `COR`, no topo.
+- **O visual do renderer 3D, no navegador de verdade.** A geometria foi conferida no Node e a
+  imagem, por capturas do **Chrome em modo headless** — foi assim que apareceram a cabeça
+  saindo do quadro na parede e a caminhada que não parava. O que a captura não julga: o ritmo
+  das animações (uma imagem é um instante), a suavidade a 60 quadros por segundo e a
+  legibilidade no seu monitor. Abra a página antes da LIVE e ajuste `web/jogo.js` — as cores
+  estão todas no objeto `COR`, no topo.
 - **O modelo 3D do personagem.** Não existe arte: o boneco é montado com caixas no próprio
-  código (`criarPersonagem()`). Não há rig, nem esqueleto, nem animação de verdade — pernas e
-  braços balançam por conta própria. Se você tiver um arquivo `.glb`, ele pode substituir o
-  boneco sem tocar em mais nada.
+  código (`criarPersonagem()`). Não há rig nem esqueleto — braço e perna são grupos com o pivô
+  no ombro e no quadril, e giram em bloco a partir do `seno` do tempo. É o suficiente para ler
+  como caminhada parada e em movimento, mas não é animação de verdade. Se você tiver um arquivo
+  `.glb`, ele pode substituir o boneco sem tocar em mais nada — os únicos números que o resto do
+  código usa dele estão em `PASSEIO`, no `camera.js`.
 - **O TikTok LIVE Studio.** Não foi instalado nem executado nesta máquina (não é software deste
   repositório). A seção 7 traz os princípios verificados — proporção 9:16 do palco, janela visível
   e não minimizada —, mas os **nomes de menu** vêm de guias da comunidade, porque a TikTok não
