@@ -55,7 +55,8 @@ rodar `python main.py` e nada mais muda.
 
 ## 2. Instalação no Windows
 
-Precisa de **Python 3.11+**. No PowerShell, dentro da pasta do projeto:
+Precisa de **Python 3.10+** — é o que a `TikTokLive` declara (`Requires-Python: >=3.10`, com
+suporte oficial até o 3.13). No PowerShell, dentro da pasta do projeto:
 
 ```powershell
 python -m venv .venv
@@ -74,9 +75,9 @@ pip install -r requirements.txt
 
 ### Se o runtime do TikTok falhar no Python 3.14
 
-A `TikTokLive` declara suporte oficial até o **3.13** (os classificadores do pacote vão até lá).
-A instalação e a importação foram verificadas no 3.14, mas o runtime da conexão não. Se você vir
-erros estranhos ao conectar, crie o ambiente em **3.11, 3.12 ou 3.13**:
+A `TikTokLive` declara suporte de **3.10 a 3.13**. A instalação e a importação foram verificadas
+no 3.14, mas o runtime da conexão não. Se você vir erros estranhos ao conectar, crie o ambiente
+em **3.12 ou 3.13** — as duas versões mais novas que a biblioteca declara suportar:
 
 ```powershell
 py -0p                # lista as versoes que voce ja tem instaladas
@@ -85,8 +86,9 @@ py -3.12 -m venv .venv312
 pip install -r requirements.txt
 ```
 
-Se o `py -0p` não mostrar nenhuma versão entre 3.11 e 3.13, instale uma em `python.org/downloads`
-antes: o `py -3.12` só funciona depois disso. Nada mais no projeto depende da versão do Python.
+Se o `py -0p` não mostrar nenhuma versão entre 3.10 e 3.13, instale uma em `python.org/downloads`
+antes: o `py -3.12` só funciona depois disso. Nada mais no projeto depende da versão do Python —
+não há recurso de 3.11+ no código.
 
 ---
 
