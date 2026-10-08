@@ -1,5 +1,10 @@
 pygame-ce==2.5.8
 TikTokLive==7.0.1
 
+# Renderer 3D no navegador (--web). O TikTokLive ja instala esta biblioteca
+# como dependencia propria; ela esta aqui porque o projeto passou a usa-la
+# direto, e dependencia usada direto tem que estar declarada.
+websockets==17.2
+
 # Desenvolvimento
 pytest==8.3.4

@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TikTok LIVE Interactive Game</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!--
+    Palco 9:16 (1080x1920 em unidades logicas), centralizado na janela.
+    Tudo aqui dentro e posicionado em porcentagem da altura do palco, para
+    a proporcao valer em qualquer tamanho de janela — e o OBS pode capturar
+    a janela em qualquer resolucao sem perder o enquadramento.
+
+    As faixas do topo e da base repetem o layout do renderer pygame
+    (ui/theme.py: ALTURA_HUD=320, ALTURA_FEED=430) para o TikTok nao cobrir
+    nada com legenda e botoes.
+  -->
+  <div id="palco">
+    <header id="hud">
+      <div class="linha-titulo">
+        <span id="titulo">TIKTOK GAME</span>
+        <span id="selo"><i id="ponto"></i><span id="selo-texto">conectando</span></span>
+      </div>
+
+      <div class="barra-linha">
+        <span class="rotulo">HP</span>
+        <div class="barra"><div id="barra-hp"></div></div>
+        <span id="valor-hp" class="valor">100 / 100</span>
+      </div>
+
+      <div class="barra-linha">
+        <span class="rotulo">XP</span>
+        <div class="barra"><div id="barra-xp"></div></div>
+        <span id="valor-xp" class="valor">0 / 100</span>
+      </div>
+
+      <div id="rodape">
+        <div class="contador"><span class="num" id="nivel">1</span><span class="cap">Nivel</span></div>
+        <div class="contador"><span class="num" id="presentes">0</span><span class="cap">Presentes</span></div>
+        <div class="contador"><span class="num" id="likes">0</span><span class="cap">Likes</span></div>
+        <div class="contador"><span class="num" id="follows">0</span><span class="cap">Follows</span></div>
+        <div class="contador"><span class="num" id="shares">0</span><span class="cap">Shares</span></div>
+      </div>
+    </header>
+
+    <!-- A cena 3D. O canvas e criado pelo Three.js dentro desta div. -->
+    <div id="arena"></div>
+
+    <!-- Banners grandes (level up, chefe, evento mega), sobre a arena. -->
+    <div id="banners"></div>
+
+    <footer id="feed">
+      <div id="feed-titulo">EVENTOS</div>
+      <ul id="feed-lista"></ul>
+    </footer>
+
+    <!-- Aparece so quando o WebSocket cai. -->
+    <div id="aviso" hidden>
+      <strong>Sem conexao com o Python.</strong>
+      <span>Confira se o <code>main.py --web</code> ainda esta rodando. Reconectando…</span>
+    </div>
+  </div>
+
+  <script type="module" src="jogo.js"></script>
+</body>
+</html>

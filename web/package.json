@@ -1,0 +1,9 @@
+{
+  "name": "tiktok-live-interactive-game-web",
+  "private": true,
+  "type": "module",
+  "description": "Renderer 3D. O 'type: module' existe para o Node tratar os .js daqui como modulos ES, o que permite verificar a camera sem navegador (ver verifica_camera.mjs). O navegador nao le este arquivo.",
+  "scripts": {
+    "verificar": "node ../../.superpowers/sdd/2026-10-08-tiktok-live-interactive-game/verifica_camera.mjs"
+  }
+}

@@ -335,7 +335,7 @@ precisa ser reajustado.
 > não gera tarja, e uma janela capturada por outro programa precisa estar visível e não minimizada.
 > Os **nomes de menu** do LIVE Studio vêm de guias da comunidade, não de documentação oficial: a
 > TikTok não publica manual do LIVE Studio. Um rótulo pode estar com nome um pouco diferente na sua
-> versão. A seção 13 registra isso.
+> versão. A seção 14 registra isso.
 
 ---
 
@@ -406,7 +406,90 @@ qualquer ajuste.
 
 ---
 
-## 10. Adicionar um presente novo
+## 10. O renderer 3D (o visual novo)
+
+O jogo tem **dois renderers**, e os dois leem o mesmo `GameState`. Nada da lógica — regras,
+níveis, presentes, anti-spam — sabe qual dos dois está desenhando.
+
+| | `pygame` (padrão) | `3D no navegador` |
+|---|---|---|
+| Comando | `python main.py` | `python main.py --web` |
+| Onde aparece | janela do pygame | `http://127.0.0.1:8765` no navegador |
+| Como o OBS captura | Captura de Janela | **Captura de Navegador** |
+| Visual | formas 2D | cena Three.js com luz, sombra e profundidade |
+
+### Como rodar
+
+```powershell
+.venv\Scripts\python.exe main.py --web
+```
+
+Ele imprime a URL no terminal. **Abra no navegador** (`http://127.0.0.1:8765`), deixe em tela
+cheia e aponte o OBS para essa aba. Para trocar a porta: `--web --porta 9000`.
+
+No OBS, a fonte é **Captura de Navegador** (Browser), não Captura de Janela — o resto da
+seção 6 vale igual. O palco já é 9:16, então não estique nem corte nada.
+
+### Por que o navegador, e não o pygame
+
+O pygame não desenha luz nem sombra: não existe modelo de iluminação, e sombra teria que ser
+desenhada à mão, por forma. O navegador tem WebGL no hardware, e o Three.js entrega
+iluminação, sombra projetada e profundidade de graça. O custo é uma peça a mais na
+arquitetura — o que **não** mudou a arquitetura, só a ponta dela:
+
+```
+GameEngine ──► GameState ──┬──► ui/ (pygame)          ──► janela  ──► OBS
+                           │
+                           └──► renderer_web/snapshot ─► WebSocket ─► Three.js ─► OBS
+```
+
+O `main.py --web` **não importa pygame em momento nenhum** — e isso tem teste
+(`test_modo_web_nao_carrega_pygame`). Não é firula: importar pygame abre o SDL, então o modo
+web exigia ambiente gráfico sem usar nenhum. As duas pontas são independentes: se um dia
+houver um renderer Unity ou Godot, ele consome o mesmo `GameState.to_dict()`.
+
+### Como a taxa de quadros não depende da internet
+
+O laço do jogo **nunca escreve no soquete**. Ele chama `publicar()`, que só guarda o retrato
+mais recente debaixo de um cadeado; uma thread separada acorda 20 vezes por segundo e é quem
+escreve para os navegadores. Um celular em 3G que não consegue acompanhar perde quadros e
+nada mais — o jogo no PC segue liso. Há um teste para isso
+(`test_publicar_nao_espera_cliente`), porque é o tipo de coisa que só se percebe quando a
+LIVE já está no ar e travando.
+
+### O que dá e o que não dá para conferir sem navegador
+
+O desenho em si só se vê abrindo a página. Duas coisas, porém, são geometria pura e foram
+conferidas rodando o **Three.js de verdade** no Node — inclusive a mais traiçoeira:
+
+- **A névoa.** Com um `Fog` de alcance fixo, a câmera ficava a 19 unidades e a nevoa
+  começava a 16: a arena inteira aparecia lavada, justamente no fundo da tela, que é de onde
+  os inimigos vêm. Agora o alcance é **calculado a partir da posição da câmera** e recalculado
+  a cada redimensionamento.
+- **O enquadramento.** O personagem anda até a borda de baixo, que é onde a câmera inclinada
+  cobre menos mundo. Os extremos são projetados e conferidos um a um.
+
+O que **não** foi verificado, porque exigiria abrir o navegador nesta máquina: o resultado
+visual da iluminação, das sombras e das animações. A seção 14 lista isso em detalhe.
+
+### Ajustar a câmera
+
+Tudo fica em `web/camera.js`, com os números medidos em comentário:
+
+| Constante | O que faz |
+|---|---|
+| `INCLINACAO` | ângulo da câmera, em graus, medido do chão. `45` é o padrão |
+| `ALTURA_ALVO` | altura do ponto que a câmera olha |
+| `SOBRA_CHAO` | quanto de chão existe além da arena — é para onde a névoa se dissolve |
+
+Aos 45° o personagem ocupa ~8,7% da altura do painel e a arena ocupa 56% do quadro. **Não é
+chute:** subir a inclinação enche mais o quadro *e* encolhe o personagem ao mesmo tempo
+(aos 70° ele vira um risco de 0,8%), então 45 é o meio-termo. A tabela completa está no
+comentário da constante `INCLINACAO`.
+
+---
+
+## 11. Adicionar um presente novo
 
 **Só JSON. Não abra o Python.**
 
@@ -439,7 +522,7 @@ Ações disponíveis hoje:
 
 ---
 
-## 11. Adicionar uma ação nova
+## 12. Adicionar uma ação nova
 
 Aqui, sim, é Python — mas é uma função só.
 
@@ -456,7 +539,7 @@ verdade, então não existe lista para manter em dois lugares.
 
 ---
 
-## 12. Limitações e honestidade
+## 13. Limitações e honestidade
 
 - **A `TikTokLive` é engenharia reversa** do protocolo interno do TikTok. Não é API oficial, pode
   quebrar sem aviso — e **a própria biblioteca se declara não pronta para produção**. Por isso ela
@@ -480,18 +563,22 @@ verdade, então não existe lista para manter em dois lugares.
 
 ---
 
-## 13. O que foi verificado — e o que não foi
+## 14. O que foi verificado — e o que não foi
 
 Verificado nesta máquina, rodando os comandos exatamente como estão escritos aqui:
 
 | Verificação | Resultado |
 |---|---|
-| Suíte de testes (`pytest`) | **220 passaram**, nenhum skip |
+| Suíte de testes (`pytest`) | **229 passaram**, nenhum skip |
 | Instalação limpa (`venv` + `pip install -r requirements.txt`) | OK no Python 3.14.6 |
 | `python main.py` com o placeholder de username | Recusa com mensagem clara, código de saída 2 |
 | `--test --script demo` | 15 eventos, level up, chefe, banners, sai limpo no ESC |
 | A sequência de REPL da seção 4 | `Rose 10` = +50 XP · `like 250` = 2 marcos · `Lion` = banner MEGA · `Galaxy` = chefe |
 | `--burst 2000` e `--burst 9000` | Sem travar. Com 9000, a fila enche em 5000 e descarta 4000 |
+| `--web`: HTTP + WebSocket ponta a ponta | 34 conferências: os arquivos são servidos, travessia de caminho é recusada, e um retrato chega por WebSocket com o personagem dentro |
+| Enquadramento da câmera 3D (Three.js real, no Node) | Tudo cabe no quadro; a névoa não pega na arena; o personagem fica com 8,7% do painel |
+| `--web`, fechar com conexão pendurada | Fecha em ~1 s, não em 10 s |
+| `--web` num ambiente sem tela | Roda: pygame não é importado neste modo |
 
 **Isto não foi verificado, porque precisa de você:**
 
@@ -502,6 +589,15 @@ Verificado nesta máquina, rodando os comandos exatamente como estão escritos a
   não foi testada. É exatamente para isso que existe o plano B do 3.12.
 - **A captura no OBS.** As configurações acima são as certas para 1080x1920, mas quem
   confirma é a prévia do OBS.
+- **O visual do renderer 3D.** A geometria foi conferida com o Three.js de verdade rodando no
+  Node (enquadramento, névoa, tamanho do personagem), mas **a imagem não foi vista por ninguém**:
+  não houve navegador nesta máquina. Iluminação, sombras, cores e o ritmo das animações são
+  exatamente o tipo de coisa que só se julga olhando. Abra a página antes da LIVE e ajuste
+  `web/jogo.js` — as cores estão todas no objeto `COR`, no topo.
+- **O modelo 3D do personagem.** Não existe arte: o boneco é montado com caixas no próprio
+  código (`criarPersonagem()`). Não há rig, nem esqueleto, nem animação de verdade — pernas e
+  braços balançam por conta própria. Se você tiver um arquivo `.glb`, ele pode substituir o
+  boneco sem tocar em mais nada.
 - **O TikTok LIVE Studio.** Não foi instalado nem executado nesta máquina (não é software deste
   repositório). A seção 7 traz os princípios verificados — proporção 9:16 do palco, janela visível
   e não minimizada —, mas os **nomes de menu** vêm de guias da comunidade, porque a TikTok não
@@ -518,7 +614,7 @@ Se o `ACTION` aparecer a cada presente, está tudo ligado de ponta a ponta.
 
 ---
 
-## 14. Licença
+## 15. Licença
 
 `TikTokLive` é distribuída sob **AGPL-3.0 modificada**, mas a licença traz uma **exceção (§18) que
 isenta explicitamente** quem integra a biblioteca — e **cita "TikTok LIVE games" pelo nome** como

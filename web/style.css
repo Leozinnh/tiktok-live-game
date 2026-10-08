@@ -1,0 +1,317 @@
+/*
+  Paleta e medidas copiadas de ui/theme.py. O renderer web e o pygame
+  desenham o MESMO layout: se um mudar sozinho, os dois divergem e a
+  captura passa a nao bater com o ensaio.
+
+  Unidade: 1vh = 19.2 unidades logicas (o palco tem 1920 de altura), entao
+  cada tamanho aqui e o valor de TAMANHOS_FONTE dividido por 19.2.
+*/
+
+:root {
+  --fundo: #0e1018;
+  --painel: #1a1e2a;
+  --painel-claro: #262c3c;
+  --texto: #eef1f8;
+  --texto-fraco: #98a0b2;
+  --hp: #e8484e;
+  --xp: #4a98ff;
+  --verde: #3ed076;
+  --amarelo: #f6c83e;
+  --roxo: #b060f6;
+  --laranja: #fa9236;
+  --ciano: #3ed6dc;
+
+  --fonte-titulo: 2.4vh;
+  --fonte-media: 1.77vh;
+  --fonte-pequena: 1.35vh;
+  --fonte-minima: 1.04vh;
+
+  --margem: 1.46vh;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: var(--fundo);
+  color: var(--texto);
+  font-family: "Segoe UI", system-ui, sans-serif;
+  /* A janela e capturada por outro programa: selecao de texto e cursor
+     piscando so aparecem como defeito na transmissao. */
+  user-select: none;
+  cursor: none;
+}
+
+body {
+  display: grid;
+  place-items: center;
+}
+
+/* O palco 9:16. `min()` garante que ele caiba tambem quando a janela for
+   mais estreita que 9:16, sem estourar para os lados. */
+#palco {
+  position: relative;
+  aspect-ratio: 9 / 16;
+  height: min(100vh, calc(100vw * 16 / 9));
+  width: auto;
+  background: var(--fundo);
+  overflow: hidden;
+}
+
+/* ---------- HUD (topo: 40..360 de 1920) ---------- */
+
+#hud {
+  position: absolute;
+  left: var(--margem);
+  right: var(--margem);
+  top: 2.08vh;
+  height: 16.67vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding-bottom: 0.9vh;
+}
+
+.linha-titulo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: var(--fonte-titulo);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+
+#selo {
+  display: flex;
+  align-items: center;
+  gap: 0.7vh;
+  font-size: var(--fonte-pequena);
+  font-weight: 600;
+  color: var(--texto-fraco);
+}
+
+#ponto {
+  width: 1.1vh;
+  height: 1.1vh;
+  border-radius: 50%;
+  background: var(--texto-fraco);
+  flex: none;
+}
+
+#selo.ao-vivo { color: var(--hp); }
+#selo.ao-vivo #ponto {
+  background: var(--hp);
+  animation: pulsar 1.4s ease-in-out infinite;
+}
+
+#selo.teste { color: var(--amarelo); }
+#selo.teste #ponto { background: var(--amarelo); }
+
+@keyframes pulsar {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.25; }
+}
+
+.barra-linha {
+  display: flex;
+  align-items: center;
+  gap: 1.2vh;
+  font-size: var(--fonte-media);
+}
+
+.rotulo {
+  width: 4.5vh;
+  font-weight: 700;
+  color: var(--texto-fraco);
+  font-size: var(--fonte-media);
+}
+
+.barra {
+  flex: 1;
+  height: 2.1vh;
+  background: var(--painel-claro);
+  border-radius: 0.4vh;
+  overflow: hidden;
+}
+
+.barra > div {
+  height: 100%;
+  width: 100%;
+  border-radius: 0.4vh;
+  /* A barra anda a cada retrato (20/s). Sem transicao ela treme; com
+     transicao curta ela desliza. */
+  transition: width 90ms linear;
+}
+
+#barra-hp { background: var(--hp); }
+#barra-xp { background: var(--xp); }
+
+.valor {
+  width: 14vh;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--texto-fraco);
+  font-size: var(--fonte-media);
+}
+
+#rodape {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+}
+
+.contador {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.2vh;
+}
+
+.contador .num {
+  font-size: var(--fonte-media);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.contador .cap {
+  font-size: var(--fonte-minima);
+  color: var(--texto-fraco);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+/* ---------- Arena (320..1490 de 1920) ---------- */
+
+#arena {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 16.67vh;
+  height: 60.94vh;
+  overflow: hidden;
+}
+
+#arena canvas { display: block; }
+
+/* ---------- Banners (sobre a arena) ---------- */
+
+#banners {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 16.67vh;
+  height: 60.94vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1.2vh;
+  pointer-events: none;
+}
+
+.banner {
+  padding: 1.1vh 2.6vh;
+  border-radius: 1vh;
+  background: rgba(14, 16, 24, 0.82);
+  border: 0.2vh solid currentColor;
+  font-size: var(--fonte-titulo);
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-align: center;
+  animation: entrar 220ms ease-out;
+}
+
+.banner .detalhe {
+  display: block;
+  font-size: var(--fonte-pequena);
+  font-weight: 600;
+  color: var(--texto-fraco);
+  letter-spacing: 0;
+  margin-top: 0.4vh;
+}
+
+@keyframes entrar {
+  from { transform: scale(0.82); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+/* ---------- Feed (1490..1920 de 1920) ---------- */
+
+#feed {
+  position: absolute;
+  left: var(--margem);
+  right: var(--margem);
+  top: 77.6vh;
+  height: 22.4vh;
+  display: flex;
+  flex-direction: column;
+  padding-top: 2.6vh;
+}
+
+#feed-titulo {
+  font-size: var(--fonte-minima);
+  letter-spacing: 0.14em;
+  color: var(--texto-fraco);
+  font-weight: 700;
+  margin-bottom: 0.6vh;
+}
+
+#feed-lista {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 0.35vh;
+}
+
+#feed-lista li {
+  display: flex;
+  align-items: baseline;
+  gap: 0.9vh;
+  font-size: var(--fonte-pequena);
+  line-height: 1.35;
+  padding: 0.45vh 0.9vh;
+  border-radius: 0.5vh;
+  background: var(--painel);
+  /* O item mais novo entra deslizando; os antigos sobem. */
+  animation: deslizar 180ms ease-out;
+}
+
+@keyframes deslizar {
+  from { transform: translateY(0.9vh); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+#feed-lista .icone { flex: none; font-size: var(--fonte-pequena); }
+#feed-lista .autor { font-weight: 700; flex: none; }
+#feed-lista .texto { color: var(--texto); }
+#feed-lista .detalhe { color: var(--texto-fraco); margin-left: auto; font-size: var(--fonte-minima); }
+
+/* ---------- Aviso de queda ---------- */
+
+#aviso {
+  position: absolute;
+  left: 50%;
+  top: 47%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  gap: 0.8vh;
+  padding: 2vh 3vh;
+  border-radius: 1vh;
+  background: rgba(14, 16, 24, 0.94);
+  border: 0.2vh solid var(--hp);
+  text-align: center;
+  font-size: var(--fonte-media);
+  max-width: 80%;
+}
+
+#aviso[hidden] { display: none; }
+#aviso span { font-size: var(--fonte-pequena); color: var(--texto-fraco); }
+#aviso code { color: var(--amarelo); }
