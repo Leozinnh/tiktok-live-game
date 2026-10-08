@@ -2,11 +2,11 @@ import json
 from pathlib import Path
 from typing import Any
 
-# A Task 8 substitui isto por `from game.actions import known_actions`.
-ACOES_VALIDAS = frozenset({
-    "xp", "heal", "damage", "run", "jump", "speed",
-    "shield", "rage", "spawn_enemy", "special", "boss", "mega",
-})
+from game.actions import known_actions
+
+# Nomes de acao validos no config.json. Vem do registro real de acoes:
+# adicionar uma acao em game/actions.py ja a habilita na configuracao.
+ACOES_VALIDAS = known_actions()
 
 SECOES_OBRIGATORIAS = ("app", "tiktok", "game", "rules")
 SECOES_DE_REGRA = ("gifts", "comments", "likes", "follows", "shares")
