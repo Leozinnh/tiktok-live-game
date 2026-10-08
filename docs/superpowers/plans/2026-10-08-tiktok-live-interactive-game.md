@@ -17,7 +17,22 @@
 - `core/` e `game/` **não podem** importar `pygame` nem `TikTokLive`. `ui/` nunca escreve no estado do jogo.
 - Resolução lógica de projeto: **1080x1920**. `render_scale` (default `1.0`) multiplica para o tamanho da janela.
 - Todos os textos visíveis ao público em **português**. Comentários e docstrings em português.
-- Nomes de ação válidos (exatamente estes 12): `xp`, `heal`, `damage`, `run`, `jump`, `speed`, `shield`, `rage`, `spawn_enemy`, `special`, `boss`, `mega`.
+- Nomes de ação válidos (exatamente estes 12): `xp`, `heal`, `damage`, `run`, `jump`, `speed`, `shield`, `rage`, `spawn_enemy`, `special`, `boss`, `mega`. A Task 10 acrescenta `steer`, que só é usado por regras de comentário (§6.5 da spec).
+
+**Contrato da API TikTokLive 7.0.1 — verificado no código-fonte, não presumido:**
+
+| Fato | Consequência |
+|---|---|
+| `TikTokLiveClient.connect(*, fetch_gift_info, fetch_room_info, fetch_live_check, ...)` é `async` | Usar `await client.connect(...)` dentro do loop, nunca `client.run()`, que chamaria `asyncio.run()` de dentro de um loop |
+| `TikTokLiveClient.disconnect(self, close_client=False)` é `async` | É o encerramento correto aqui |
+| `TikTokLiveClient.close()` é `async` mas passa por `_clean_tasks()`, que chama `run_until_complete()` | **É o bug do código atual**: levanta `RuntimeError` dentro do loop, engolido pelo `except Exception: pass` |
+| `TikTokLiveClient` **não tem** `stop()` | Não inventar |
+| Erros em `TikTokLive.client.errors`: `UserOfflineError`, `UserNotFoundError`, `WebcastBlockedError`, `AgeRestrictedError`, `SignAPIError` | Importar desse caminho exato |
+| `GiftEvent.streaking` já retorna `False` para presentes não-streakable e `not repeat_end` caso contrário | Só `streaking` basta. **Não** testar `gift.type == 1` — esse campo não é o critério |
+| `GiftEvent.repeat_count`, `.gift`, `.user` são anotações simples; `gift` e `user` são `Optional` | Checar `None` |
+| `CommentEvent.content` é o nome v3; `.comment` é alias legado que devolve `content` | Ler `content` com fallback para `comment` |
+| `LikeEvent` tem `count` e `total`; **`user` é `Optional[ExtendedUser]`** | Like sem usuário é esperado, não é erro |
+| `FollowEvent` e `ShareEvent` existem, em `custom_events.py`, ambas subclasses de `SocialEvent` (que tem `user: Optional`) | `from TikTokLive.events import FollowEvent, ShareEvent` funciona |
 - Tipos de evento (exatamente estes): `comment`, `gift`, `like`, `follow`, `share`, `system`.
 - Toda validação de config deve **recusar a inicialização** com mensagem que aponta o presente e o campo com erro.
 - Latência do TikTok é de 10–30 s: a meia-vida do vetor de intenção é **1,5 s** (default configurável), não 0,35 s.
@@ -27,7 +42,7 @@
 
 Inputs e condições que a spec implica mas nenhum teste óbvio cobre — cada linha vira teste na tarefa dona do código:
 
-1. **`event.user` pode ser `None`** no `LikeEvent` (o TikTok limita likes por usuário após ~10–20). Um like sem usuário não pode levantar exceção nem virar actor `"None"`. → Task 12, 10.
+1. **`event.user` pode ser `None`** no `LikeEvent` (o TikTok limita likes por usuário após ~10–20). Um like sem usuário não pode levantar exceção nem virar actor `"None"`. → Task 13, 10.
 2. **Presente sem `gift_id` e sem nome casando** deve ser ignorado em silêncio, sem ação nem log de erro. → Task 10.
 3. **`config.json` com `render_scale` absurdo** (0, negativo, ou que gere janela < 1 px) não pode abrir uma janela inválida nem dividir por zero. → Task 4, 14.
 4. **Fila de eventos sob rajada contínua** deve descartar o **mais antigo** e nunca bloquear a thread do adapter. → Task 3.
@@ -308,7 +323,9 @@ def test_contador_de_descarte_e_exato():
     for i in range(5):
         q.put(_ev(i))
     assert q.dropped == 2
-    assert q.accepted == 3
+    # `accepted` conta o que ENTROU na fila, inclusive o que depois foi
+    # descartado para dar lugar a um evento mais novo.
+    assert q.accepted == 5
 
 
 def test_nunca_levanta_excecao_com_fila_cheia():
@@ -862,10 +879,6 @@ import time
 from collections import defaultdict, deque
 from typing import Callable
 
-# Um ator sem nome (like anonimo) nao pode compartilhar balde com outro
-# ator sem nome, senao um usuario sem nome silencia todos os outros.
-_ATOR_ANONIMO = "\x00anonimo"
-
 JANELA_ORCAMENTO = 1.0
 
 
@@ -906,17 +919,20 @@ class RateLimiter:
             if ultimo is not None and agora - ultimo < cooldown:
                 return False
 
-        ator = actor.strip() or _ATOR_ANONIMO
-        chave = (rule_key, ator)
-        if per_user_cooldown > 0:
+        # Um ator sem nome nao pode ser punido nem pode silenciar outros
+        # atores sem nome: o TikTok manda likes sem `user` quando o usuario
+        # ja curtiu demais. Sem identificacao, o cooldown por usuario nao
+        # se aplica.
+        ator = actor.strip()
+        if per_user_cooldown > 0 and ator:
+            chave = (rule_key, ator)
             ultimo = self._usuario.get(chave)
             if ultimo is not None and agora - ultimo < per_user_cooldown:
                 return False
+            self._usuario[chave] = agora
 
         if cooldown > 0:
             self._regra[rule_key] = agora
-        if per_user_cooldown > 0:
-            self._usuario[chave] = agora
         return True
 
     def allow_action(self, action: str) -> bool:
@@ -1107,6 +1123,10 @@ class GameState:
     # Preenchidos pela Task 7.
     effects: object | None = None
     announcements: object | None = None
+
+    # Copia do vetor de intencao, so para o renderer desenhar a faixa de
+    # direcao. O motor e a fonte da verdade; este campo e somente leitura.
+    intent_display: float = 0.0
 
     total_gifts: int = 0
     total_likes: int = 0
@@ -2312,7 +2332,7 @@ Substituir `steer`, `intent` e `update` em `game/engine.py`, e adicionar os mét
 E adicionar em `__init__`, junto das outras configs:
 
 ```python
-        self.largura = float(config["app"].get("window_width", 1080))
+        self.largura = float(config.get("app", {}).get("window_width", 1080))
         self._jump_duration = 0.8
 ```
 
@@ -2367,8 +2387,6 @@ git commit -m "Adiciona movimento por vetor de intencao e simulacao de inimigos"
 - [ ] **Step 1: Escrever o teste que falha**
 
 ```python
-import pytest
-
 from core.events import EventType, LiveEvent
 from core.ratelimit import RateLimiter
 from core.rules import RuleEngine, normalize
@@ -2437,15 +2455,6 @@ def test_comentario_sem_regra_nao_faz_nada():
     assert game.state.xp == 0
 
 
-def test_comentario_de_direita_empurra_a_intencao():
-    engine, game, _ = _montar({"comments": [{"contains": "direita", "action": "steer_right"}]})
-    with pytest.raises(Exception):
-        pass  # placeholder removido abaixo
-```
-
-> **Atenção:** os testes de direção usam a ação `steer`, que é registrada aqui. Substitua o último teste por:
-
-```python
 def test_comentario_de_direita_empurra_a_intencao():
     engine, game, _ = _montar(
         {"comments": [{"contains": "direita", "action": "steer", "amount": 1}]}
@@ -2971,13 +2980,9 @@ TAMANHO_MAX = 5 * 1024 * 1024  # 5 MB
 BACKUPS = 3
 
 
-class _FormatadorHora(logging.Formatter):
+def _formatador() -> logging.Formatter:
     """Hora entre colchetes, sem data: uma LIVE nao dura dias."""
-
-    def formatTime(self, record, datefmt=None):  # noqa: N802 (API do logging)
-        return self.formatTime.__wrapped__(record, datefmt) if False else super().formatTime(
-            record, datefmt or FORMATO_DATA
-        )
+    return logging.Formatter(FORMATO, datefmt=FORMATO_DATA)
 
 
 def setup_logging(log_dir: str | Path = "logs", level: int = logging.INFO) -> logging.Logger:
@@ -2995,10 +3000,10 @@ def setup_logging(log_dir: str | Path = "logs", level: int = logging.INFO) -> lo
         backupCount=BACKUPS,
         encoding="utf-8",
     )
-    arquivo.setFormatter(_FormatadorHora(FORMATO, datefmt=FORMATO_DATA))
+    arquivo.setFormatter(_formatador())
 
     console = logging.StreamHandler()
-    console.setFormatter(logging.Formatter(FORMATO, datefmt=FORMATO_DATA))
+    console.setFormatter(_formatador())
 
     raiz = logging.getLogger()
     raiz.setLevel(level)
@@ -3057,14 +3062,7 @@ class EventJournal:
             self._arquivo = None
 ```
 
-> O `_FormatadorHora` acima ficou confuso. Substitua-o por um simples:
-
-```python
-def _formatador() -> logging.Formatter:
-    return logging.Formatter(FORMATO, datefmt=FORMATO_DATA)
-```
-
-e use `_formatador()` nos dois handlers. O resultado é `[09:16:01] INFO    core.rules | ACTION ...`.
+O resultado no arquivo é `[09:16:01] INFO    core.rules | ACTION ...`.
 
 - [ ] **Step 4: Rodar e ver passar**
 
@@ -3313,8 +3311,11 @@ class SimulatedAdapter:
     def start(self) -> None:
         self._status = AdapterStatus(connected=True, detail="modo teste")
         logger.info("Modo TESTE ativo. Nenhuma conexao com o TikTok.")
-        if self.interactive:
-            print(AJUDA)
+        if not self.interactive:
+            # Sem terminal: nao abrir thread de leitura. `input()` num
+            # processo sem stdin levantaria ou travaria em laco.
+            return
+        print(AJUDA)
         self._thread = threading.Thread(target=self._loop, name="simulado", daemon=True)
         self._thread.start()
 
@@ -3428,20 +3429,14 @@ def parse_command(
         )
 
     # "NomeDoPresente [qtd]" quando a primeira palavra nao e um comando.
+    # Duas palavras e o maximo: "bom dia galera" e comentario, nao presente.
     if primeiro not in COMANDOS_EXEMPLO and len(partes) <= 2:
         quantidade = 1
         if len(partes) == 2:
             try:
                 quantidade = max(1, int(partes[1]))
-                return LiveEvent(
-                    type=EventType.GIFT,
-                    username=autor,
-                    display_name=autor,
-                    gift_name=partes[0],
-                    quantity=quantidade,
-                )
             except ValueError:
-                pass
+                quantidade = 1  # "Rose muito" ainda e presente, sem quantidade
         return LiveEvent(
             type=EventType.GIFT,
             username=autor,
@@ -3533,6 +3528,11 @@ from adapters.tiktok_live import evento_de_comentario, evento_de_like, evento_de
 from core.events import EventType
 
 
+# Distingue "nao informado" de "explicitamente None", para que os dublês
+# consigam representar os campos opcionais da biblioteca.
+_VAZIO = object()
+
+
 class UsuarioFalso:
     def __init__(self, unique_id="joao", nickname="João"):
         self.unique_id = unique_id
@@ -3540,31 +3540,39 @@ class UsuarioFalso:
 
 
 class PresenteFalso:
-    def __init__(self, name="Rose", type=1, diamond_count=1):
+    def __init__(self, name="Rose", gift_id="5655"):
         self.name = name
-        self.type = type
-        self.diamond_count = diamond_count
+        self.id = gift_id
 
 
 class ComentarioFalso:
-    def __init__(self, content="corre", user=None):
+    """Dublê do CommentEvent. Expõe `content`, que é o nome v3."""
+
+    def __init__(self, content="corre", user=_VAZIO):
         self.content = content
-        self.user = user if user is not None else UsuarioFalso()
-        self.comment = content  # alias de leitura
+        self.user = UsuarioFalso() if user is _VAZIO else user
 
 
 class PresenteEventoFalso:
-    def __init__(self, user=None, gift=None, repeat_count=1, repeat_end=1, streaking=False):
-        self.user = user if user is not None else UsuarioFalso()
-        self.gift = gift if gift is not None else PresenteFalso()
+    """Dublê do GiftEvent.
+
+    `streaking` é a propriedade real da biblioteca: `False` para presente
+    não-streakable e `not repeat_end` caso contrário. O dublê reproduz essa
+    relação em vez de aceitar os dois soltos, para que o teste não possa
+    montar um estado que a biblioteca nunca produz.
+    """
+
+    def __init__(self, user=_VAZIO, gift=_VAZIO, repeat_count=1, streaking=False):
+        self.user = UsuarioFalso() if user is _VAZIO else user
+        self.gift = PresenteFalso() if gift is _VAZIO else gift
         self.repeat_count = repeat_count
-        self.repeat_end = repeat_end
+        self.repeat_end = 0 if streaking else 1
         self.streaking = streaking
 
 
 class LikeEventoFalso:
-    def __init__(self, user=None, count=1, total=1):
-        self.user = user
+    def __init__(self, user=_VAZIO, count=1, total=1):
+        self.user = UsuarioFalso() if user is _VAZIO else user
         self.count = count
         self.total = total
 
@@ -3577,32 +3585,34 @@ def test_comentario_usa_content_e_user():
     assert e.display_name == "João"
 
 
+def test_comentario_le_o_alias_legado_comment():
+    class Antigo:
+        comment = "pula"
+        user = None
+
+    assert evento_de_comentario(Antigo()).text == "pula"
+
+
 def test_comentario_com_user_none_nao_quebra():
     e = evento_de_comentario(ComentarioFalso(user=None))
-    e.user = None
-    e2 = evento_de_comentario(type("X", (), {"content": "oi", "user": None})())
-    assert e2.username == ""
-    assert e2.actor() == "desconhecido"
+    assert e.username == ""
+    assert e.actor() == "desconhecido"
 
 
 def test_presente_streak_em_andamento_e_ignorado():
-    obj = PresenteEventoFalso(streaking=True, repeat_end=0, repeat_count=5)
-    assert evento_de_presente(obj) is None
+    assert evento_de_presente(PresenteEventoFalso(streaking=True, repeat_count=5)) is None
 
 
-def test_presente_streakable_final_e_processado():
-    obj = PresenteEventoFalso(gift=PresenteFalso(type=1), streaking=False, repeat_end=1, repeat_count=20)
-    e = evento_de_presente(obj)
+def test_presente_streak_final_traz_a_contagem_consolidada():
+    e = evento_de_presente(PresenteEventoFalso(streaking=False, repeat_count=20))
     assert e is not None
     assert e.quantity == 20
 
 
-def test_presente_nao_streakable_e_processado_uma_vez():
-    # gift.type != 1 significa nao-streakable: streaking tambem e False.
-    obj = PresenteEventoFalso(gift=PresenteFalso(type=2), streaking=False, repeat_count=1)
-    e = evento_de_presente(obj)
-    assert e is not None
-    assert e.quantity == 1
+def test_presente_traz_nome_e_id():
+    e = evento_de_presente(PresenteEventoFalso(gift=PresenteFalso(name="Rose", gift_id="5655")))
+    assert e.gift_name == "Rose"
+    assert e.gift_id == "5655"
 
 
 def test_presente_sem_gift_e_ignorado():
@@ -3625,6 +3635,7 @@ def test_like_sem_usuario_nao_quebra():
 def test_like_com_total_menor_que_o_anterior_e_ignorado():
     e = evento_de_like(LikeEventoFalso(count=1, total=10), total_anterior=100)
     assert e.like_total == 100
+    assert e.like_delta == 0
 ```
 
 - [ ] **Step 2: Rodar e ver falhar**
@@ -3691,9 +3702,13 @@ def evento_de_comentario(obj: Any) -> LiveEvent:
 def evento_de_presente(obj: Any) -> LiveEvent | None:
     """Traduz um GiftEvent. Retorna None para eventos que devem ser ignorados.
 
-    Detalhe verificado: `event.streaking` e False TANTO no evento final de um
-    streak QUANTO em todo presente nao-streakable. `gift.type == 1` e o que
-    distingue os dois casos.
+    `streaking` e a propriedade da propria biblioteca: `False` para presente
+    nao-streakable, e `not repeat_end` caso contrario. Ou seja, o evento
+    FINAL de um streak chega com `streaking=False` e `repeat_count`
+    consolidado. Ignorar os intermediarios evita contar a mesma sequencia
+    dezenas de vezes.
+
+    Nao ha teste extra de "streakable": `streaking` ja cobre os dois casos.
     """
     gift = getattr(obj, "gift", None)
     if gift is None:
@@ -3703,11 +3718,7 @@ def evento_de_presente(obj: Any) -> LiveEvent | None:
         return None  # evento intermediario de streak
 
     user = getattr(obj, "user", None)
-    quantidade = int(
-        getattr(obj, "repeat_count", 1)
-        or getattr(obj, "combo_count", 1)
-        or 1
-    )
+    quantidade = int(getattr(obj, "repeat_count", 1) or 1)
     gift_id = getattr(gift, "id", None) or getattr(obj, "gift_id", None)
 
     return LiveEvent(
@@ -3968,7 +3979,7 @@ class TikTokLiveAdapter:
 - [ ] **Step 4: Rodar e ver passar**
 
 Run: `pytest tests/test_tiktok_mapping.py -v`
-Esperado: 9 passed
+Esperado: 10 passed
 
 - [ ] **Step 5: Verificar que o TikTokLive é importável e o cliente existe**
 
@@ -4516,7 +4527,10 @@ class Overlay:
 
         fundo = self._escurecer(self._cor(ann.kind), 0.25)
         superficie = _superficie_com_alpha(self.theme, r, fundo, alpha)
-        if superficie is not None:
+        if superficie is None:
+            # Alpha cheio: caminho rapido, sem alocar superficie extra.
+            d.panel(r, fundo)
+        else:
             d.surface.blit(superficie, r.to_px(self.theme.scale)[:2])
 
         centro = r.x + r.w / 2
@@ -4774,11 +4788,7 @@ class PygameUI:
             pygame.quit()
 ```
 
-> `state.intent_display` é um atributo dinâmico. Para manter o `GameState` limpo, adicione o campo em `game/state.py`:
-
-```python
-    intent_display: float = 0.0
-```
+> `intent_display` já foi declarado no `GameState` na Task 6. O `draw` apenas copia o valor do motor para lá, porque o renderer não pode chamar `game.intent()` — a UI só lê o estado.
 
 - [ ] **Step 2: Verificar que a janela abre e fecha**
 
@@ -4805,7 +4815,7 @@ Esperado: `janela OK` e nenhuma exceção. A janela abre em 432x768 (0.4 de 1080
 - [ ] **Step 3: Commitar**
 
 ```bash
-git add ui/pygame_ui.py game/state.py
+git add ui/pygame_ui.py
 git commit -m "Reescreve a UI do pygame para a janela vertical 9:16"
 ```
 
@@ -4908,7 +4918,6 @@ def rodar_script(nome: str, fila: EventQueue, config: dict) -> None:
             LiveEvent(type=EventType.GIFT, username="lucas", gift_name="Lion"),
         ]
         for i, evento in enumerate(roteiro):
-            evento.timestamp = evento.timestamp
             fila.put(evento)
             print(f"  [{i + 1}/{len(roteiro)}] {evento.type} {evento.actor()} {evento.gift_name or evento.text}")
     logger.info("Cenario '%s' carregado (%s eventos na fila).", nome, fila.size())
