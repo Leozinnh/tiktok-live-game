@@ -427,6 +427,20 @@ níveis, presentes, anti-spam — sabe qual dos dois está desenhando.
 Ele imprime a URL no terminal. **Abra no navegador** (`http://127.0.0.1:8765`), deixe em tela
 cheia e aponte o OBS para essa aba. Para trocar a porta: `--web --porta 9000`.
 
+**Mexam o boneco sem entrar ao vivo:** `--web` sozinho **conecta no TikTok de verdade** — é a
+LIVE real. Para o modo teste com o renderer 3D, some os dois:
+
+```powershell
+.venv\Scripts\python.exe main.py --web --test
+```
+
+Aí os comandos são digitados **na mesma janela do PowerShell** onde você rodou o comando — não
+há um `>` esperando; é só digitar e apertar Enter. Digite `help` para ver a lista (a seção 4
+tem a tabela toda). O navegador continua sendo a tela do jogo. Para sair, **Ctrl+C** no
+terminal — no modo web não existe janela do pygame, então não há ESC nem F5/F6/F7.
+
+Não use `--script` aqui: ele desliga o REPL (os eventos já vêm roteirizados).
+
 No OBS, a fonte é **Captura de Navegador** (Browser), não Captura de Janela — o resto da
 seção 6 vale igual. O palco já é 9:16, então não estique nem corte nada.
 
