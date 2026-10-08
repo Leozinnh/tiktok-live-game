@@ -37,7 +37,7 @@ Faça este teste **antes de tudo**. Ele decide se o projeto serve para você hoj
 | Caso | Como testar | O jogo chega ao público? |
 |---|---|---|
 | **A — RTMP próprio** | Vá em `tiktok.com` → **Go LIVE** na barra lateral → abra `livecenter.tiktok.com/producer` → aparecem **Server URL** e **Stream Key** | ✅ Sim, caminho limpo |
-| **B — TikTok Live Studio** | Baixe em `tiktok.com/studio/download` (Windows) | ✅ Sim, via Live Studio |
+| **B — TikTok Live Studio** | Baixe em `tiktok.com/studio/download` (Windows) | ✅ Sim — **seção 7**, e o OBS é dispensável |
 | **C — só celular** | O botão LIVE só existe no app | ❌ **Não. Limite técnico, não política** |
 
 Duas armadilhas na hora do diagnóstico:
@@ -206,7 +206,10 @@ e fecha a janela.
 
 ---
 
-## 6. CONFIGURANDO O OBS PARA O TIKTOK
+## 6. CONFIGURANDO O OBS PARA O TIKTOK (caso A)
+
+> **Você tem o TikTok LIVE Studio?** Então pule para a seção 7 — ele substitui o OBS por inteiro,
+> e nada daqui é necessário.
 
 ### 6.1 Instalar
 
@@ -263,7 +266,80 @@ Assim você não destrói suas cenas horizontais ao trocar o canvas.
 
 ---
 
-## 7. Usar o celular como câmera
+## 7. TikTok LIVE Studio (o caminho do caso B)
+
+**Se você tem o LIVE Studio instalado, ignore a seção 6 inteira.** Ele substitui o OBS: é o app da
+própria TikTok, faz a captura e envia para a LIVE sem Server URL e sem Stream Key. Não instale o OBS
+também — dois programas disputando a mesma janela só cria confusão.
+
+Também **não precisa da seção 8** (celular como câmera): o vídeo sai inteiro do PC.
+
+### 7.1 Antes de abrir o LIVE Studio
+
+1. `config.json` → `tiktok.username` precisa ter o seu @ de verdade (não o `@SEU_USUARIO`).
+2. Rode o jogo **primeiro**:
+
+```
+.venv\Scripts\python.exe main.py
+```
+
+A janela se chama **`TikTok LIVE Interactive Game`**. É por esse nome que você vai achá-la na
+captura — deixe-a aberta e **visível**.
+
+### 7.2 Criar o palco em 9:16
+
+Escolha o modo **Portrait / retrato (9:16)**, não Dual nem Landscape. A resolução de retrato padrão
+é **1080x1920** — exatamente a proporção da janela do jogo.
+
+> Palco e fonte com proporções diferentes = **tarja preta**. Aqui os dois são 9:16, então a janela
+> do jogo preenche o palco inteiro sem tarja.
+
+### 7.3 Adicionar a janela do jogo
+
+1. **Add Source** (o "+") → **Window Capture**.
+2. Na lista de janelas, escolha **`TikTok LIVE Interactive Game`**.
+3. Estique a fonte até cobrir o palco inteiro (ou use o ajuste automático de enquadramento, se
+   houver).
+
+Se aparecer **Game Capture** ("Capture specific window"), ele costuma dar imagem melhor para
+conteúdo de jogo — mas se ficar **preto**, apague a fonte e volte para **Window Capture**.
+
+### 7.4 Tela preta: a lista de suspeitos
+
+| Sintoma | Causa provável e solução |
+|---|---|
+| Fonte preta no palco | Rode o **LIVE Studio como administrador** (botão direito no ícone → Executar como administrador). É a causa mais comum |
+| Continua preta | O jogo está **minimizado** ou atrás de outra janela. Traga-o para a frente |
+| Continua preta | Apague a fonte e refaça com **Window Capture** em vez de Game Capture |
+| O jogo aparece, mas o cursor some | Desmarque **Capture Cursor** nas propriedades da fonte |
+| Quadro travado em 5–10 fps | Feche outros apps que também estejam sendo capturados; o jogo em si é leve |
+
+### 7.5 Nitidez: o `render_scale` na sua tela
+
+O jogo roda em `render_scale = 0.6` — janela de **648x1152**, que o LIVE Studio estica para
+1080x1920. É um aumento de 1,67x: fica bom, mas levemente macio.
+
+Sua tela é **3440x1440**, então cabe mais. Com `render_scale: 0.72` a janela fica **778x1382**
+(ainda cabe nos 1440 de altura com a barra de título), o esticão cai para 1,39x e o texto sai mais
+nítido. Teste os dois e fique com o que agradar: **a proporção continua 9:16**, então nada mais
+precisa ser reajustado.
+
+### 7.6 Antes de ir ao ar
+
+1. Confirme que a janela do jogo está na frente, com o HUD inteiro visível.
+2. Rode `--test` (seção 4) e confirme que o presente aparece **no palco do LIVE Studio** — ainda
+   sem estar ao vivo.
+3. Só então inicie a LIVE.
+
+> **Honestidade sobre esta seção:** os *princípios* aqui são verificados — 9:16 capturando 9:16
+> não gera tarja, e uma janela capturada por outro programa precisa estar visível e não minimizada.
+> Os **nomes de menu** do LIVE Studio vêm de guias da comunidade, não de documentação oficial: a
+> TikTok não publica manual do LIVE Studio. Um rótulo pode estar com nome um pouco diferente na sua
+> versão. A seção 13 registra isso.
+
+---
+
+## 8. Usar o celular como câmera
 
 Todas estas instalam um driver de câmera virtual **no PC**. Todas funcionam no Windows.
 
@@ -287,7 +363,7 @@ aparece". **Prefira USB.**
 
 ---
 
-## 8. Como o público vê o jogo
+## 9. Como o público vê o jogo
 
 ```
 Espectador comenta "direita"
@@ -330,7 +406,7 @@ qualquer ajuste.
 
 ---
 
-## 9. Adicionar um presente novo
+## 10. Adicionar um presente novo
 
 **Só JSON. Não abra o Python.**
 
@@ -363,7 +439,7 @@ Ações disponíveis hoje:
 
 ---
 
-## 10. Adicionar uma ação nova
+## 11. Adicionar uma ação nova
 
 Aqui, sim, é Python — mas é uma função só.
 
@@ -380,7 +456,7 @@ verdade, então não existe lista para manter em dois lugares.
 
 ---
 
-## 11. Limitações e honestidade
+## 12. Limitações e honestidade
 
 - **A `TikTokLive` é engenharia reversa** do protocolo interno do TikTok. Não é API oficial, pode
   quebrar sem aviso — e **a própria biblioteca se declara não pronta para produção**. Por isso ela
@@ -404,7 +480,7 @@ verdade, então não existe lista para manter em dois lugares.
 
 ---
 
-## 12. O que foi verificado — e o que não foi
+## 13. O que foi verificado — e o que não foi
 
 Verificado nesta máquina, rodando os comandos exatamente como estão escritos aqui:
 
@@ -426,6 +502,10 @@ Verificado nesta máquina, rodando os comandos exatamente como estão escritos a
   não foi testada. É exatamente para isso que existe o plano B do 3.12.
 - **A captura no OBS.** As configurações acima são as certas para 1080x1920, mas quem
   confirma é a prévia do OBS.
+- **O TikTok LIVE Studio.** Não foi instalado nem executado nesta máquina (não é software deste
+  repositório). A seção 7 traz os princípios verificados — proporção 9:16 do palco, janela visível
+  e não minimizada —, mas os **nomes de menu** vêm de guias da comunidade, porque a TikTok não
+  publica manual do LIVE Studio.
 
 Na sua primeira LIVE, acompanhe o `logs/app.log`. O que importa ver:
 
@@ -438,7 +518,7 @@ Se o `ACTION` aparecer a cada presente, está tudo ligado de ponta a ponta.
 
 ---
 
-## 13. Licença
+## 14. Licença
 
 `TikTokLive` é distribuída sob **AGPL-3.0 modificada**, mas a licença traz uma **exceção (§18) que
 isenta explicitamente** quem integra a biblioteca — e **cita "TikTok LIVE games" pelo nome** como
