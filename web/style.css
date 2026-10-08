@@ -72,6 +72,11 @@ body {
   flex-direction: column;
   justify-content: space-between;
   padding-bottom: 0.9vh;
+  /* O HUD termina em 18,75vh e a arena comeca em 16,67vh: os dois se
+     sobrepoem por 2,08vh, e a arena vem depois no DOM. Sem isto o canvas
+     pintava por cima dos rotulos dos contadores (Nivel, Presentes, Likes,
+     Follows, Shares) — os numeros apareciam, as legendas nao. */
+  z-index: 2;
 }
 
 .linha-titulo {

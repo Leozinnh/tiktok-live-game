@@ -478,6 +478,17 @@ Rode você mesmo, sem abrir nada:
 node .superpowers/sdd/<plano>/verifica_camera.mjs
 ```
 
+- **O tamanho dos inimigos vem do motor, não do desenho.** O motor diz que um inimigo tem 22
+  unidades de raio; o renderer desenhava um octaedro de 42, quase o dobro. O número estava
+  solto dentro do `jogo.js`, e por isso ninguém notou — o tamanho errado não quebra teste
+  nenhum. Agora `GameState.to_dict()` manda o `radius` de cada inimigo e do chefe, e o
+  renderer **escala a malha a partir dele** (`escalaDe`, em `jogo.js`). Se você mudar
+  `Enemy.radius`, a tela acompanha sozinha.
+- **O HUD não pode ficar embaixo do canvas.** O `#hud` termina em 18,75vh e a `#arena` começa
+  em 16,67vh; como a arena vem depois no DOM, ela pintava por cima dos rótulos dos contadores
+  — os números apareciam, as legendas (`Nivel`, `Presentes`, `Likes`, `Follows`, `Shares`)
+  não. Um `z-index: 2` no `#hud`, em `web/style.css`, resolve.
+
 O resto — iluminação, sombras, animações — só se vê abrindo a página. A imagem foi conferida
 com **Chrome em modo headless** (`--screenshot`), que é como os defeitos de enquadramento
 foram encontrados; a seção 14 lista o que continua sem conferência.
@@ -582,7 +593,7 @@ Verificado nesta máquina, rodando os comandos exatamente como estão escritos a
 
 | Verificação | Resultado |
 |---|---|
-| Suíte de testes (`pytest`) | **229 passaram**, nenhum skip |
+| Suíte de testes (`pytest`) | **231 passaram**, nenhum skip |
 | Instalação limpa (`venv` + `pip install -r requirements.txt`) | OK no Python 3.14.6 |
 | `python main.py` com o placeholder de username | Recusa com mensagem clara, código de saída 2 |
 | `--test --script demo` | 15 eventos, level up, chefe, banners, sai limpo no ESC |
@@ -590,7 +601,8 @@ Verificado nesta máquina, rodando os comandos exatamente como estão escritos a
 | `--burst 2000` e `--burst 9000` | Sem travar. Com 9000, a fila enche em 5000 e descarta 4000 |
 | `--web`: HTTP + WebSocket ponta a ponta | 34 conferências: os arquivos são servidos, travessia de caminho é recusada, e um retrato chega por WebSocket com o personagem dentro |
 | Enquadramento da câmera 3D (Three.js real, no Node) | Tudo cabe no quadro — inclusive o personagem nas duas paredes, do pé à cabeça; a névoa não pega no piso; o personagem fica com 9,3% do painel |
-| A imagem do renderer 3D (Chrome headless, 1080x1920) | O boneco anda e para na hora certa, os membros articulam no ombro, o piso e a borda marcam a área de jogo, e o personagem com escudo e mega continua dentro do quadro |
+| Separação dos inimigos (`tests/test_enemies.py`) | Nenhum par fica sobreposto, quadro a quadro, com o bando cheio em perseguição |
+| A imagem do renderer 3D (Chrome headless, 1080x1920) | O boneco anda e para na hora certa, os membros articulam no ombro, o piso e a borda marcam a área de jogo, o personagem com escudo e mega continua dentro do quadro, os inimigos se veem **um a um** e no tamanho do motor, e os rótulos do HUD não somem atrás do canvas |
 | `--web`, fechar com conexão pendurada | Fecha em ~1 s, não em 10 s |
 | `--web` num ambiente sem tela | Roda: pygame não é importado neste modo |
 

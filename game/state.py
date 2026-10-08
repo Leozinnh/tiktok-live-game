@@ -60,6 +60,7 @@ class GameState:
                     "y": self.boss.y,
                     "hp": self.boss.hp,
                     "max_hp": self.boss.max_hp,
+                    "radius": self.boss.radius,
                 }
             ),
             "total_gifts": self.total_gifts,

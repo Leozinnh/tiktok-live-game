@@ -256,9 +256,26 @@ function criarPersonagem() {
   return grupo;
 }
 
+/*
+  Inimigo e chefe sao desenhados pelo tamanho que o MOTOR diz, e nao por um
+  numero escolhido aqui.
+
+  O octaedro tinha 0,42 fixo — 84 unidades de largura — enquanto o motor
+  dizia `radius: 22`, ou seja 44, que e o que o renderer do pygame desenha.
+  O dobro. Parecia so um exagero de escala ate nove inimigos convergirem:
+  com o dobro do tamanho eles se sobrepunham num bloco vermelho unico, e a
+  separacao do motor nao tinha como aparecer na tela. O sprite tem que sair
+  da mesma medida que a colisao, senao o publico ve uma coisa e o jogo faz
+  outra.
+
+  Por isso a geometria nasce com raio 1 e quem manda no tamanho e o
+  `scale`, lido do retrato a cada quadro.
+*/
+const RAIO_UNITARIO = 1;
+
 function criarInimigo() {
   const malha = new THREE.Mesh(
-    new THREE.OctahedronGeometry(0.42, 0),
+    new THREE.OctahedronGeometry(RAIO_UNITARIO, 0),
     new THREE.MeshStandardMaterial({
       color: COR.inimigo, roughness: 0.4, metalness: 0.2,
       emissive: COR.inimigo, emissiveIntensity: 0.25,
@@ -268,10 +285,23 @@ function criarInimigo() {
   return malha;
 }
 
+/*
+  O raio com que cada corpo foi DESENHADO aqui, em unidades do mundo — o
+  numero que esta nas linhas abaixo, nao um escolhido a parte. O tamanho
+  final e a razao entre ele e o `radius` que o motor manda, entao mudar
+  `Enemy.radius` no Python muda a tela sem tocar no JS.
+*/
+const RAIO_DESENHADO = { inimigo: RAIO_UNITARIO, boss: 1.25 };
+
+const escalaDe = (raio, desenhado) => (raio / ESCALA) / desenhado;
+
+/** O inimigo flutua, e a altura do flutuar acompanha o tamanho dele. */
+const alturaDoVoo = (raio) => raio * 1.4;
+
 function criarBoss() {
   const grupo = new THREE.Group();
   const corpo = new THREE.Mesh(
-    new THREE.DodecahedronGeometry(1.25, 0),
+    new THREE.DodecahedronGeometry(RAIO_DESENHADO.boss, 0),
     new THREE.MeshStandardMaterial({
       color: COR.boss, roughness: 0.35, metalness: 0.3,
       emissive: COR.boss, emissiveIntensity: 0.35,
@@ -364,8 +394,17 @@ function distribuirInimigos(lista) {
 
     // Nenhuma malha livre serve: e um inimigo novo. Nasce ja na posicao.
     const malha = melhor ?? obterInimigo(indice);
+
+    // O tamanho vem do motor, a cada quadro: o retrato traz o `radius` de
+    // cada inimigo. Sem isto o sprite nao bate com a colisao — era o que
+    // fazia nove inimigos separados virarem um bloco vermelho so na tela.
+    const raioDoMotor = inimigo.radius ?? RAIO_DESENHADO.inimigo * ESCALA;
+    const raio = raioDoMotor / ESCALA;
+    malha.scale.setScalar(escalaDe(raioDoMotor, RAIO_DESENHADO.inimigo));
+    malha.userData.raio = raio;
+
     if (melhor === null) {
-      malha.position.set(desejado.x, 0.55, desejado.z);
+      malha.position.set(desejado.x, alturaDoVoo(raio), desejado.z);
     }
     usados.add(malha);
     alvo.set(malha, desejado);
@@ -496,6 +535,13 @@ function aplicar(d) {
   if (d.boss) {
     const b = obterBoss();
     b.visible = true;
+    // Mesma regra do inimigo: o chefe e desenhado no tamanho que o motor
+    // diz. O grupo inteiro escala junto — corpo e barra de vida foram
+    // montados nas mesmas proporcoes, e escalar so o corpo desalinharia a
+    // barra.
+    b.scale.setScalar(
+      escalaDe(d.boss.radius ?? RAIO_DESENHADO.boss * ESCALA, RAIO_DESENHADO.boss),
+    );
     alvo.set(b, { x: jx(d.boss.x), z: jz(d.boss.y) });
     b.userData.fracao = d.boss.max_hp > 0
       ? Math.max(0, Math.min(1, d.boss.hp / d.boss.max_hp))
@@ -604,7 +650,9 @@ function animar() {
     for (const malha of poolInimigos) {
       if (!malha.visible) continue;
       malha.rotation.y += dt * 2.4;
-      malha.position.y = 0.55 + Math.sin(tempo * 3 + malha.position.x) * 0.09;
+      const raio = malha.userData.raio ?? RAIO_DESENHADO.inimigo;
+      malha.position.y =
+        alturaDoVoo(raio) + Math.sin(tempo * 3 + malha.position.x) * raio * 0.4;
     }
 
     // --- chefe

@@ -295,6 +295,44 @@ class GameEngine:
             return
         self.state.enemies = vivos[: self.max_enemies]
 
+    def _separar_inimigos(self) -> None:
+        """Afasta inimigos sobrepostos, para o bando nao virar um so.
+
+        Todo inimigo persegue o MESMO ponto — o centro do personagem. Sem
+        nada que os desempare, as distancias entre eles tendem a zero na
+        chegada: medido, o espalhamento em x caia de 679 unidades no
+        nascimento para 92 na chegada, todos os sprites sobrepostos. O
+        publico via um inimigo em vez de nove.
+
+        A separacao e um empurrao proporcional ao quanto eles se sobrepoem,
+        e nao uma forca com inercia: resolver a sobreposicao inteira num
+        quadro so nao deixa oscilacao nenhuma para tras, e com 40 inimigos
+        no maximo sao 780 pares por quadro — nada.
+
+        O `minimo` usa `Enemy.radius`, que e a medida que o motor tem dos
+        proprios inimigos. O desenho tem que sair daqui, e nao o contrario.
+        """
+        minimo = Enemy.radius * 2.0
+        inimigos = self.state.enemies
+        for i, a in enumerate(inimigos):
+            for b in inimigos[i + 1:]:
+                dx = b.x - a.x
+                dy = b.y - a.y
+                dist = math.hypot(dx, dy)
+                if dist >= minimo:
+                    continue
+                if dist < 0.01:
+                    # Sobrepostos ao ponto de nao haver direcao. Separa no
+                    # eixo x, que e onde a arena tem espaco largo.
+                    dx, dy, dist = 1.0, 0.0, 1.0
+                ux = dx / dist
+                uy = dy / dist
+                empurrao = (minimo - dist) / 2.0
+                a.x -= ux * empurrao
+                a.y -= uy * empurrao
+                b.x += ux * empurrao
+                b.y += uy * empurrao
+
     def _atualizar_boss(self, dt: float) -> None:
         boss = self.state.boss
         if boss is None:
@@ -339,6 +377,9 @@ class GameEngine:
         self._animar_pulo()
         self._mover_inimigos(dt)
         self._atualizar_boss(dt)
+        # Depois do chefe: ele invoca inimigos, e os recem-nascidos podem
+        # cair sobre os que ja estavam em campo.
+        self._separar_inimigos()
         self.state.effects.expire()
         self.state.announcements.expire()
         self._atualizar_velocidade()
