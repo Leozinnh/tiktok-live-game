@@ -67,7 +67,7 @@ def _acao_heal(engine: GameEngine, payload: dict, event: LiveEvent) -> None:
 @register("damage")
 def _acao_damage(engine: GameEngine, payload: dict, event: LiveEvent) -> None:
     valor = int(payload.get("amount", 5))
-    engine.damage(valor)
+    engine.attack(valor)
     _anunciar(engine, event, "causou dano", f"-{valor} HP")
 
 
@@ -79,7 +79,7 @@ def _acao_run(engine: GameEngine, payload: dict, event: LiveEvent) -> None:
 
 @register("jump")
 def _acao_jump(engine: GameEngine, payload: dict, event: LiveEvent) -> None:
-    engine.state.effects.activate("jump", float(payload.get("duration", 0.8)))
+    engine.jump(float(payload.get("duration", 0.8)))
     _anunciar(engine, event, "fez o personagem PULAR")
 
 

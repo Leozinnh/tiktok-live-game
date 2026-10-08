@@ -1,4 +1,5 @@
 import logging
+import math
 import random
 import time
 from typing import Callable
@@ -57,6 +58,15 @@ class GameEngine:
         # efeito "speed" estiver ativo: o `duration` do presente e o prazo.
         self._speed_bonus = 0.0
 
+        # Limites da arena, em pixels logicos (o renderer so escala depois).
+        self.largura = float(config.get("app", {}).get("window_width", 1080))
+        self.altura = float(config.get("app", {}).get("window_height", 1920))
+
+        self._jump_duration = 0.8
+        # Um respawn limpa inimigos e boss; os laços de simulacao precisam
+        # saber que isso aconteceu no meio do quadro para nao repovoar a lista.
+        self._respawns = 0
+
     # ---------- experiencia ----------
 
     def xp_para_subir(self, level: int) -> int:
@@ -92,6 +102,19 @@ class GameEngine:
         self.state.hp = min(self.state.max_hp, self.state.hp + max(0, amount))
         return self.state.hp - antes
 
+    def attack(self, amount: int) -> None:
+        """Dano vindo de um presente.
+
+        Se ha um chefe na arena, o golpe vai nele — e assim que o publico
+        derruba o chefe, ja que o personagem so anda e pula. Sem chefe, o
+        alvo e o proprio personagem (presente troll).
+        """
+        boss = self.state.boss
+        if boss is not None and boss.is_alive():
+            boss.hp = max(0, boss.hp - max(0, int(amount)))
+            return
+        self.damage(amount)
+
     def damage(self, amount: int) -> None:
         if self.state.effects.active("shield"):
             self.state.effects.activate("shield_hit", 0.3)
@@ -103,6 +126,7 @@ class GameEngine:
             self._respawn()
 
     def _respawn(self) -> None:
+        self._respawns += 1
         self.state.hp = self.state.max_hp
         self.state.xp = max(0, self.state.xp - 25)
         self.state.enemies.clear()
@@ -162,10 +186,20 @@ class GameEngine:
             self._speed_bonus = 0.0
             self.state.speed = self.state.base_speed
 
-    # ---------- intencao de direcao (Task 9 completa o movimento) ----------
+    # ---------- salto ----------
+
+    def jump(self, duration: float) -> None:
+        self._jump_duration = max(0.05, float(duration))
+        self.state.effects.activate("jump", self._jump_duration)
+
+    # ---------- intencao de direcao ----------
 
     def steer(self, direction: float) -> None:
-        """Comentario de direcao. `direction` em [-1, +1]."""
+        """Comentario de direcao. `direction` em [-1, +1].
+
+        A soma e limitada: 500 pessoas gritando 'direita' nao podem virar
+        um vetor absurdo.
+        """
         d = max(-1.0, min(1.0, float(direction)))
         self._intent = max(-3.0, min(3.0, self._intent + d))
         self._intent_until = self._now() + self.intent_half_life
@@ -173,9 +207,115 @@ class GameEngine:
     def intent(self) -> float:
         return self._intent
 
+    def _decair_intencao(self, dt: float) -> None:
+        if dt <= 0:
+            return
+        if self._now() >= self._intent_until:
+            # Sem comando recente: decai ate zero.
+            fator = 0.5 ** (dt / max(0.01, self.intent_half_life))
+            self._intent *= fator
+            if abs(self._intent) < 0.01:
+                self._intent = 0.0
+
+    def _mover_personagem(self, dt: float) -> None:
+        """Acelera na direcao da intencao, em vez de teleportar."""
+        personagem = self.state.character
+        alvo = self._intent * self.intent_max_speed
+        diferenca = alvo - personagem.vx
+        passo = self.intent_accel * dt
+        personagem.vx += max(-passo, min(passo, diferenca))
+        personagem.vx -= personagem.vx * min(1.0, self.intent_friction * dt)
+
+        if abs(personagem.vx) < 1.0:
+            personagem.vx = 0.0
+            return
+
+        personagem.x += personagem.vx * dt
+        personagem.facing = 1 if personagem.vx >= 0 else -1
+
+        margem = personagem.radius
+        if personagem.x < margem:
+            personagem.x = margem
+            personagem.vx = 0.0
+        elif personagem.x > self.largura - margem:
+            personagem.x = self.largura - margem
+            personagem.vx = 0.0
+
+    def _animar_pulo(self) -> None:
+        if not self.state.effects.active("jump"):
+            self.state.character.y_offset = 0.0
+            return
+        restante = self.state.effects.remaining("jump")
+        duracao = max(0.05, self._jump_duration)
+        fase = 1.0 - (restante / duracao)
+        self.state.character.y_offset = abs(math.sin(fase * math.pi)) * 150.0
+
+    # ---------- inimigos ----------
+
+    def _mover_inimigos(self, dt: float) -> None:
+        alvo = self.state.character
+        respawns = self._respawns
+        vivos: list[Enemy] = []
+        for inimigo in self.state.enemies:
+            dx = alvo.x - inimigo.x
+            dy = alvo.y - inimigo.y
+            dist = math.hypot(dx, dy) or 1.0
+            inimigo.x += (dx / dist) * inimigo.speed * dt
+            inimigo.y += (dy / dist) * inimigo.speed * dt
+            if inimigo.reached(alvo.x, alvo.y, raio=alvo.radius + 14.0):
+                self.damage(self.base_enemy_damage)
+                continue
+            vivos.append(inimigo)
+        if self._respawns != respawns:
+            # O personagem caiu no meio do quadro: `_respawn` ja limpou a
+            # lista, e repor `vivos` desfaria a limpeza.
+            return
+        self.state.enemies = vivos[: self.max_enemies]
+
+    def _atualizar_boss(self, dt: float) -> None:
+        boss = self.state.boss
+        if boss is None:
+            return
+        if not boss.is_alive():
+            self.add_xp(80 + self.state.level * 20)
+            self.state.announcements.push(
+                kind="boss",
+                actor="",
+                text="CHEFÃO DERROTADO",
+                detail="+XP",
+                ttl=4.0,
+                big=True,
+            )
+            self.state.boss = None
+            return
+
+        alvo = self.state.character
+        dx = alvo.x - boss.x
+        dy = alvo.y - boss.y
+        dist = math.hypot(dx, dy) or 1.0
+        boss.x += (dx / dist) * boss.speed * dt
+        boss.y += (dy / dist) * boss.speed * dt
+
+        boss.since_summon += dt
+        if boss.since_summon >= boss.summon_every:
+            boss.since_summon = 0.0
+            self.spawn_enemy(2)
+
+        if boss.reached(alvo.x, alvo.y, raio=alvo.radius + boss.radius):
+            self.damage(self.base_enemy_damage * 2)
+
     # ---------- ciclo ----------
 
     def update(self, dt: float) -> None:
+        # Uma pausa longa (janela arrastada, GC) nao pode teleportar nada:
+        # o passo e limitado antes de simular.
+        dt = max(0.0, min(dt, 0.05))
+
+        self._decair_intencao(dt)
+        self._mover_personagem(dt)
+        self._animar_pulo()
+        self._mover_inimigos(dt)
+        self._atualizar_boss(dt)
         self.state.effects.expire()
         self.state.announcements.expire()
         self._atualizar_velocidade()
