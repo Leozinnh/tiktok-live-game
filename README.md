@@ -396,7 +396,41 @@ verdade, então não existe lista para manter em dois lugares.
 
 ---
 
-## 12. Licença
+## 12. O que foi verificado — e o que não foi
+
+Verificado nesta máquina, rodando os comandos exatamente como estão escritos aqui:
+
+| Verificação | Resultado |
+|---|---|
+| Suíte de testes (`pytest`) | **186 passaram**, nenhum skip |
+| Instalação limpa (`venv` + `pip install -r requirements.txt`) | OK no Python 3.14.6 |
+| `python main.py` com o placeholder de username | Recusa com mensagem clara, código de saída 2 |
+| `--test --script demo` | 15 eventos, level up, chefe, banners, encerra limpo |
+| A sequência de REPL da seção 4 | `Rose 10` = +50 XP · `like 250` = 2 marcos · `Lion` = banner MEGA · `Galaxy` = chefe |
+| `--burst 2000` e `--burst 9000` | Sem travar. 9000 descarta 4000 e encerra sozinho |
+
+**Isto não foi verificado, porque precisa de você:**
+
+- **A conexão real com o TikTok.** Falta uma LIVE no ar. Tudo que a biblioteca `TikTokLive`
+  expõe foi conferido contra a versão instalada (7.0.1), mas o handshake de verdade só
+  acontece na sua primeira transmissão.
+- **O runtime da conexão no Python 3.14.** Instalar e importar funciona; uma conexão longa,
+  não foi testada. É exatamente para isso que existe o plano B do 3.12.
+- **A captura no OBS.** As configurações acima são as certas para 1080x1920, mas quem
+  confirma é a prévia do OBS.
+
+Na sua primeira LIVE, acompanhe o `logs/app.log`. O que importa ver:
+
+```
+INFO adapters.tiktok_live | CONNECTED | @seu_usuario | room=7xxxxxxxxx
+INFO core.rules | ACTION | usuario=... | evento=EventType.GIFT | presente=Rose | acao=xp
+```
+
+Se o `ACTION` aparecer a cada presente, está tudo ligado de ponta a ponta.
+
+---
+
+## 13. Licença
 
 `TikTokLive` é distribuída sob **AGPL-3.0 modificada**, mas a licença traz uma **exceção (§18) que
 isenta explicitamente** quem integra a biblioteca — e **cita "TikTok LIVE games" pelo nome** como
